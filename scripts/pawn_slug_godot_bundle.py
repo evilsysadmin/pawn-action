@@ -18,7 +18,8 @@ core = transport.core
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_BUILD_DIR = ROOT / "games/pawn-slug-godot/build/web"
 DEFAULT_CONFIG = ROOT / "infra/cloudflare/r2-assets.json"
-DEFAULT_PREFIX = "pawn-slug-godot"
+DEFAULT_PREFIX = "pawn-action"
+LEGACY_PREFIX = "pawn-slug-godot"
 POINTER_NAME = "current.json"
 REQUIRED_FILES = {"index.html", "index.js", "index.wasm", "index.pck"}
 RELEASE_RE = re.compile(r"^[0-9a-f]{16}$")
@@ -134,7 +135,39 @@ def _pointer_action(existing: dict[str, Any], desired: dict[str, Any]) -> str:
     return "unchanged"
 
 
-def publish(build_dir: pathlib.Path, config_path: pathlib.Path, prefix: str, dry_run: bool) -> dict[str, Any]:
+def _authorize_publish(prefix: str, *, dry_run: bool, confirmed: bool) -> None:
+    # Chess Studio still owns pawn-slug-godot/current.json. Never allow this
+    # repository to publish there, even with an explicit confirmation flag.
+    if prefix != DEFAULT_PREFIX:
+        raise BundleError(
+            f"Pawn Action may only publish under {DEFAULT_PREFIX!r}; "
+            f"refusing legacy/shared prefix {prefix!r}"
+        )
+    if not dry_run and not confirmed:
+        raise BundleError("Live R2 publication requires --confirm-publish (manual cutover gate)")
+
+
+def _fetch_existing_pointer(token: str, account_id: str, bucket: str,
+                            pointer_key: str, base_url: str, prefix: str) -> dict[str, Any] | None:
+    try:
+        raw = core.get_object(token, account_id, bucket, pointer_key)
+    except core.PublishError as exc:
+        # Only an explicit missing pointer permits a first publication.
+        # Never overwrite a known pointer on timeouts, 403/500, or stale API errors.
+        if str(exc) == f"Cloudflare GET HTTP 404 para {pointer_key}":
+            return None
+        raise BundleError(f"Cannot verify existing R2 pointer {pointer_key}: {exc}") from exc
+    try:
+        candidate = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeError) as exc:
+        raise BundleError(f"Existing R2 pointer {pointer_key} is invalid JSON") from exc
+    validate_pointer(candidate, base_url=base_url, prefix=prefix)
+    return candidate
+
+
+def publish(build_dir: pathlib.Path, config_path: pathlib.Path, prefix: str,
+            dry_run: bool, confirmed: bool = False) -> dict[str, Any]:
+    _authorize_publish(prefix, dry_run=dry_run, confirmed=confirmed)
     config = core.load_config(config_path)
     base_url = f"https://{config['customDomain']}"
     pointer = build_pointer(build_dir, base_url, prefix, os.environ.get("GITHUB_SHA", "").lower())
@@ -145,13 +178,7 @@ def publish(build_dir: pathlib.Path, config_path: pathlib.Path, prefix: str, dry
     token, account_id = core.require_env()
     bucket = config["bucket"]
     pointer_key = f"{prefix.strip('/')}/{POINTER_NAME}"
-    existing: dict[str, Any] | None = None
-    try:
-        candidate = json.loads(core.get_object(token, account_id, bucket, pointer_key).decode("utf-8"))
-        validate_pointer(candidate, base_url=base_url, prefix=prefix)
-        existing = candidate
-    except Exception:
-        existing = None
+    existing = _fetch_existing_pointer(token, account_id, bucket, pointer_key, base_url, prefix)
 
     if existing is not None:
         action = _pointer_action(existing, pointer)
@@ -219,6 +246,50 @@ def self_test() -> None:
         assert first["files"]["index.wasm"]["contentType"] == "application/wasm"
         same_bundle_new_source = build_pointer(root, "https://assets.example.test", DEFAULT_PREFIX, "b" * 40)
         assert _pointer_action(first, second) == "unchanged"
+        assert first["index"].startswith("https://assets.example.test/pawn-action/releases/")
+        legacy_preview = build_pointer(root, "https://assets.example.test", LEGACY_PREFIX, "a" * 40)
+        assert legacy_preview["index"].startswith("https://assets.example.test/pawn-slug-godot/releases/")
+        for wrong_prefix in (LEGACY_PREFIX, "", "pawn-action/../pawn-slug-godot", "pawn-action/extra"):
+            for dry_run in (True, False):
+                try:
+                    _authorize_publish(wrong_prefix, dry_run=dry_run, confirmed=True)
+                except BundleError:
+                    pass
+                else:
+                    raise AssertionError(f"Unsafe R2 publish prefix accepted: {wrong_prefix!r}")
+        try:
+            _authorize_publish(DEFAULT_PREFIX, dry_run=False, confirmed=False)
+        except BundleError:
+            pass
+        else:
+            raise AssertionError("Live publish without confirmation was accepted")
+        _authorize_publish(DEFAULT_PREFIX, dry_run=True, confirmed=False)
+        _authorize_publish(DEFAULT_PREFIX, dry_run=False, confirmed=True)
+        from unittest.mock import patch
+        pointer_key = f"{DEFAULT_PREFIX}/{POINTER_NAME}"
+        with patch.object(core, "get_object", side_effect=core.PublishError(
+            f"Cloudflare GET HTTP 404 para {pointer_key}"
+        )):
+            assert _fetch_existing_pointer("test", "test", "test", pointer_key,
+                                           "https://assets.example.test", DEFAULT_PREFIX) is None
+        for failure in (f"Cloudflare GET HTTP 403 para {pointer_key}",
+                        f"Cloudflare GET HTTP 500 para {pointer_key}"):
+            with patch.object(core, "get_object", side_effect=core.PublishError(failure)):
+                try:
+                    _fetch_existing_pointer("test", "test", "test", pointer_key,
+                                            "https://assets.example.test", DEFAULT_PREFIX)
+                except BundleError:
+                    pass
+                else:
+                    raise AssertionError(f"Unsafe pointer overwrite on {failure!r}")
+        with patch.object(core, "get_object", return_value=b"{bad json"):
+            try:
+                _fetch_existing_pointer("test", "test", "test", pointer_key,
+                                        "https://assets.example.test", DEFAULT_PREFIX)
+            except BundleError:
+                pass
+            else:
+                raise AssertionError("Corrupt existing R2 pointer was accepted")
         assert _pointer_action(first, same_bundle_new_source) == "repoint"
         (root / "index.pck").write_bytes(b"changed" * 64)
         changed = build_pointer(root, "https://assets.example.test", DEFAULT_PREFIX, "b" * 40)
@@ -247,6 +318,8 @@ def parser() -> argparse.ArgumentParser:
     publish_cmd.add_argument("--config", type=pathlib.Path, default=DEFAULT_CONFIG)
     publish_cmd.add_argument("--prefix", default=DEFAULT_PREFIX)
     publish_cmd.add_argument("--dry-run", action="store_true")
+    publish_cmd.add_argument("--confirm-publish", action="store_true",
+                             help="Explicitly authorize writing pawn-action/current.json (never the legacy pointer)")
     verify = sub.add_parser("verify-pointer")
     verify.add_argument("path", type=pathlib.Path)
     verify.add_argument("--config", type=pathlib.Path, default=DEFAULT_CONFIG)
@@ -265,7 +338,7 @@ def main() -> int:
             pointer = build_pointer(args.build_dir, f"https://{config['customDomain']}", args.prefix)
             print(json.dumps(pointer, indent=2, sort_keys=True))
         elif args.command == "publish":
-            publish(args.build_dir, args.config, args.prefix, args.dry_run)
+            publish(args.build_dir, args.config, args.prefix, args.dry_run, args.confirm_publish)
         elif args.command == "verify-pointer":
             print(verify_pointer(args.path, args.config, args.prefix, args.expected_source_sha))
         return 0
