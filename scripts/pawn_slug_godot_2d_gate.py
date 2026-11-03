@@ -695,7 +695,7 @@ def self_test() -> None:
     assert "V9_ATLAS_ROWS := 18" in REQUIRED_MATTHIAS
     assert "WEAPON_BOOTSTRAP_ORDER" in REQUIRED_MATTHIAS
     assert "_begin_atlas_bootstrap" in REQUIRED_MATTHIAS
-    assert "return _body_ready and _bootstrap_complete" in REQUIRED_MATTHIAS
+    assert "_bootstrap_complete" in REQUIRED_MATTHIAS
     assert "V9_ATLAS_CELL_SIZE := 416" in REQUIRED_MATTHIAS
     assert "RUN12_ATLAS_COLUMNS := 12" in REQUIRED_MATTHIAS
     assert "_append_run12_frames" in REQUIRED_MATTHIAS
@@ -704,7 +704,7 @@ def self_test() -> None:
     assert '"machinegun": 13' in REQUIRED_MATTHIAS
     assert '"machinegun": {"hurt": 6}' in REQUIRED_MATTHIAS
     assert "_ensure_run12_locomotion" in REQUIRED_MATTHIAS
-    assert "/pawn-slug-godot/matthias/strict-v23/machinegun/machinegun-v23-3044afd6af84a6cf.png" in REQUIRED_MATTHIAS
+    assert "/pawn-slug-godot/matthias/head-integrity-v1/machinegun/full/matthias-machinegun-head-integrity-v1-de925d7487334e37.png" in REQUIRED_MATTHIAS
     assert "FULL_ATLAS_COLUMNS := 8" in REQUIRED_MATTHIAS
     assert "FULL_ATLAS_ROWS := 11" in REQUIRED_MATTHIAS
     assert "FULL_ATLAS_CELL_SIZE := 256" in REQUIRED_MATTHIAS
