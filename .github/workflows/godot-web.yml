@@ -43,6 +43,7 @@ jobs:
           python3 -S scripts/pawn_slug_godot_bundle.py self-test
           python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: 'Pillow==13.0.0'
           python3 scripts/art/test_sprite_forge.py
+          python3 -m unittest discover -s tests -p 'test_pawn_action_visual_review.py' -v
           python3 scripts/art/sprite_forge_acceptance.py --self-test
       - name: Install pinned Godot 4.7.2 editor
         shell: bash
@@ -125,13 +126,24 @@ jobs:
           PAWN_SLUG_CAPTURE_DIR="$GITHUB_WORKSPACE/visual-evidence" PAWN_SLUG_CAPTURE_STAGES=industrial_front_v1 node scripts/pawn_slug_godot_pr_capture.mjs
           node --check scripts/pawn_action_web_mobile_smoke.mjs
           PAWN_SLUG_CAPTURE_DIR="$GITHUB_WORKSPACE/visual-evidence" node scripts/pawn_action_web_mobile_smoke.mjs
+      - name: Build SHA-bound Chromium visual review packet (not visual approval)
+        shell: bash
+        env:
+          REVIEW_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/pawn_action_visual_review.py \
+            --capture-dir visual-evidence \
+            --out visual-evidence/review \
+            --source-sha "$REVIEW_SOURCE_SHA" \
+            --run-id "$GITHUB_RUN_ID"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: pawn-action-real-visual-evidence
           path: visual-evidence/
           if-no-files-found: warn
-          retention-days: 5
+          retention-days: 21
       - uses: actions/upload-artifact@v7
         with:
           name: pawn-action-godot-web

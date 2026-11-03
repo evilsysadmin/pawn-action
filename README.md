@@ -52,3 +52,11 @@ network errors and malformed JSON stop publication. This does not implement
 distributed compare-and-swap; ensure that only **one** designated publisher
 can write the Pawn Action pointer, and never enable both repositories to
 publish the legacy pointer.
+
+## Visual review before migration merge
+
+The Godot/Web CI artifact includes SHA-bound desktop, animation-closeup,
+movement and touch contact sheets under `review/`. These are real Chromium
+screenshots but **not visual approval**: compare them against an approved,
+provenance-bound Chess Studio baseline before moving extraction PR #1 out
+of Draft. See [visual migration review](docs/visual-migration-review.md).
