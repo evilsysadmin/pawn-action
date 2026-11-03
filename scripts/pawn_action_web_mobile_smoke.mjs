@@ -110,10 +110,26 @@ try {
   await portraitPage.goto(indexUrl, { waitUntil: 'domcontentloaded', timeout: 45_000 });
   await portraitPage.waitForSelector('canvas.is-ready', { state: 'visible', timeout: 60_000 });
   await portraitPage.screenshot({ path: outputDir + '/mobile-portrait-rotate.png' });
-  const portrait = await portraitPage.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+  const portrait = await portraitPage.evaluate(() => {
+    const notice = document.getElementById('rotate-notice');
+    return {
+      width: innerWidth,
+      height: innerHeight,
+      orientationBlocked: document.documentElement.classList.contains('pawn-action-portrait'),
+      noticeVisible: Boolean(notice && getComputedStyle(notice).display !== 'none'),
+      noticeText: notice?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      canvasTouchDisabled: getComputedStyle(document.getElementById('canvas')).pointerEvents === 'none',
+    };
+  });
   await portraitContext.close();
-  if (portrait.width >= portrait.height) {
-    throw new Error('Portrait resize failed: ' + JSON.stringify(portrait));
+  if (
+    portrait.width >= portrait.height ||
+    !portrait.orientationBlocked ||
+    !portrait.noticeVisible ||
+    !portrait.noticeText.includes('GIRA EL MÓVIL') ||
+    !portrait.canvasTouchDisabled
+  ) {
+    throw new Error('Portrait touch guidance not active: ' + JSON.stringify(portrait));
   }
   results.phases.push({ phase: 'portrait', ...portrait });
 
