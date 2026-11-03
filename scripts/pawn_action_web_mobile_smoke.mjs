@@ -117,7 +117,7 @@ try {
       height: innerHeight,
       orientationBlocked: document.documentElement.classList.contains('pawn-action-portrait'),
       noticeVisible: Boolean(notice && getComputedStyle(notice).display !== 'none'),
-      noticeText: notice?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      noticeText: notice?.textContent?.replace(/\s+/g, ' ').trim() || '',
       canvasTouchDisabled: getComputedStyle(document.getElementById('canvas')).pointerEvents === 'none',
     };
   });
