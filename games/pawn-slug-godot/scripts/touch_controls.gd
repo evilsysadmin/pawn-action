@@ -131,7 +131,7 @@ func _build_ui() -> void:
     notice_title.add_theme_color_override("font_color", Color("f1e7cf"))
     notice_box.add_child(notice_title)
     var notice_copy := Label.new()
-    notice_copy.text = "Pawn Slug está diseñado para jugar en horizontal."
+    notice_copy.text = "Pawn Action está diseñado para jugar en horizontal."
     notice_copy.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     notice_copy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     notice_copy.add_theme_font_size_override("font_size", 15)
