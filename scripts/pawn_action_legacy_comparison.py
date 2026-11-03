@@ -17,24 +17,32 @@ class CandidateError(ValueError):
 
 def comparison(legacy: Path, current: Path, current_sha: str) -> None:
     evidence = json.loads((legacy / "baseline-candidate.json").read_text(encoding="utf-8"))
-    if evidence.get("status") != "candidate_not_approved":
+    if evidence.get("status") not in (
+            "candidate_not_approved", "candidate_partial_not_approved"):
         raise CandidateError("Legacy source is not a verified baseline candidate")
+    smg_ok = evidence.get("smg", {}).get("status") == "captured_verified"
+    if (evidence["status"] == "candidate_not_approved") != smg_ok:
+        raise CandidateError("Inconsistent legacy SMG evidence/status")
     if len(evidence.get("sourceSha", "")) != 40 or len(current_sha) != 40:
         raise CandidateError("Missing source SHA identity")
     pairs = [
         ("Idle", "00-idle.png", "00-idle.png"),
         ("Run (independent timing)", "10-run.png", "10-run-07.png"),
         ("Run + fire", "20-run-fire.png", "20-run-fire-07.png"),
-        ("SMG selected", "51-smg-selected.png", "51-smg-selected-after-100ms.png"),
         ("Mobile landscape", "mobile-landscape-ready.png", "mobile-landscape-ready.png"),
     ]
+    if smg_ok:
+        pairs.insert(3, ("SMG selected", "51-smg-selected.png",
+                         "51-smg-selected-after-100ms.png"))
     tile_w, tile_h, top = 530, 310, 90
     sheet = Image.new("RGB", (tile_w * 2, len(pairs) * tile_h + top), "#141a23")
     draw = ImageDraw.Draw(sheet)
     draw.text((16, 12), "LEGACY CHESS STUDIO  |  CANDIDATE - NOT APPROVED", fill="white")
     draw.text((16, 32), "source: " + evidence["sourceSha"][:12] +
               "   vs   Pawn Action: " + current_sha[:12], fill="#c1cfdb")
-    draw.text((16, 51), "Independent captures: timing is not frame-locked", fill="#f6c36b")
+    draw.text((16, 51), "Independent frames, not frame-locked | " +
+              ("SMG VERIFIED" if smg_ok else "SMG NOT PROVEN"),
+              fill="#f6c36b")
     for idx, (label, before, after) in enumerate(pairs):
         row_y = top + idx * tile_h
         for column, folder, name in (

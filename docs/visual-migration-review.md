@@ -45,8 +45,13 @@ valida el `sourceSha` de 40 caracteres, el release inmutable, host, claves y
 SHA-256/bytes reales de `index.html`, `index.js`, `index.wasm` e
 `index.pck` **antes de abrir Chromium**. No utiliza tokens ni escribe en R2.
 
-Captura idle, carrera, carrera+disparo, equipamiento SMG (exige el evento real
-`weapon-changed`) y paisaje móvil. El artifact separado
+Captura idle, carrera, carrera+disparo y paisaje móvil. Intenta además
+equipamiento SMG, pero solo lo incluye en la comparación si Godot confirma
+`ready` y el evento real `weapon-changed`. Si el legado no alcanza
+`ready` (observado en el export público del 09-10-2026), registra estado
+`candidate_partial_not_approved`, eventos/errores y
+`smg-unverified-diagnostic.png`; no etiqueta un arma no probada.
+El artifact separado
 `pawn-action-legacy-visual-candidate` contiene `baseline-candidate.json`
 con hashes de capturas, procedencia del puntero y
 `side-by-side-candidate.jpg` frente a las capturas del HEAD actual.
@@ -55,9 +60,11 @@ son independientes y no equivalen a una referencia frame-locked.
 
 El servicio legacy es externo al repo nuevo; el step es opcional y
 `continue-on-error` para no convertir un fallo temporal de su CDN en un
-falso fallo de las pruebas propias de Pawn Action. Un resultado incompleto,
-un evento SMG ausente o un puntero inválido **no produce comparación válida**;
-se retiene `baseline-error.json` y la PR sigue en Draft.
+falso fallo de las pruebas propias de Pawn Action. Un puntero inválido o error de captura base retiene `baseline-error.json` y
+no produce comparación. Si solo falla el SMG, se publica **únicamente** la
+comparación parcial de los cuatro estados con hashes comprobados, señalando
+el bloqueo explícitamente. Ninguna de estas situaciones aprueba la migración;
+la PR sigue en Draft.
 
 Una captura fresca del release vivo es una *candidata verificable*, nunca
 una aprobación retrospectiva del baseline artístico de Chess Studio.

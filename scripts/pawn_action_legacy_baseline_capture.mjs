@@ -159,33 +159,68 @@ async function main() {
       await installProbe(mobile);
       await capture(mobile, index, 'mobile-landscape-ready.png', captures);
 
-      // A different route is not falsely labeled as a verified SMG pickup.
+      // An old SMG visual probe may fail to complete cold asset boot.
+      // Treat that single *state* as unproven without discarding verified
+      // pistol/mobile evidence or presenting a fake SMG comparison.
       const smg = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+      const smgErrors = [];
+      smg.on('pageerror', error => {
+        if (smgErrors.length < 12) smgErrors.push('page: ' + String(error.message));
+      });
+      smg.on('requestfailed', request => {
+        if (smgErrors.length < 12) smgErrors.push(
+          'request: ' + new URL(request.url()).pathname + ' ' +
+          String(request.failure()?.errorText || 'failed'));
+      });
       await installProbe(smg);
-      await smg.goto(index + '&weaponProbe=machinegun', { waitUntil: 'domcontentloaded' });
-      await smg.locator('canvas').waitFor({ state: 'visible', timeout: 45000 });
-      await smg.waitForFunction(() => window.__legacyReady === true, null, { timeout: 45000 });
-      await smg.waitForTimeout(900);
-      const weaponChange = await smg.evaluate(() => window.__legacyEvents.includes('weapon-changed'));
-      if (!weaponChange) {
-        throw new Error('Legacy SMG comparison not proven: no Godot weapon-changed event');
+      let smgReady = false;
+      let smgReason = '';
+      try {
+        await smg.goto(index + '&weaponProbe=machinegun', {
+          waitUntil: 'domcontentloaded', timeout: 45000,
+        });
+        await smg.locator('canvas').waitFor({ state: 'visible', timeout: 25000 });
+        await smg.waitForFunction(() => window.__legacyReady === true, null, {
+          timeout: 20000,
+        });
+        smgReady = true;
+      } catch (error) {
+        smgReason = String(error.message || error);
       }
-      const image = await smg.screenshot({ fullPage: false });
-      await writeFile(path.join(OUT, '51-smg-selected.png'), image);
-      captures['51-smg-selected.png'] = { sha256: digest(image), bytes: image.length,
-        viewport: { width: 1280, height: 720 }, stage: 'industrial_front_v1',
-        verified: 'weapon-changed bridge event' };
+      const smgEvents = await smg.evaluate(() => (
+        Array.isArray(window.__legacyEvents) ? window.__legacyEvents.slice(-50) : []
+      )).catch(() => []);
+      const weaponChange = smgReady && smgEvents.includes('weapon-changed');
+      let smgEvidence = { status: 'not_proven', ready: smgReady,
+        weaponChanged: smgEvents.includes('weapon-changed'),
+        events: smgEvents, reason: smgReason || 'missing weapon-changed bridge event',
+        errors: smgErrors,
+      };
+      if (weaponChange) {
+        await smg.waitForTimeout(900);
+        const image = await smg.screenshot({ fullPage: false });
+        await writeFile(path.join(OUT, '51-smg-selected.png'), image);
+        captures['51-smg-selected.png'] = { sha256: digest(image), bytes: image.length,
+          viewport: { width: 1280, height: 720 }, stage: 'industrial_front_v1',
+          verified: 'weapon-changed bridge event' };
+        smgEvidence = { status: 'captured_verified', ready: true,
+          weaponChanged: true, events: smgEvents, errors: smgErrors };
+      } else {
+        const diagnostic = await smg.screenshot({ fullPage: false }).catch(() => null);
+        if (diagnostic) await writeFile(path.join(OUT, 'smg-unverified-diagnostic.png'), diagnostic);
+      }
       const evidence = {
-        schema: 1, status: 'candidate_not_approved', owner: 'chess-studio',
+        schema: 1,
+        status: weaponChange ? 'candidate_not_approved' : 'candidate_partial_not_approved',
+        owner: 'chess-studio',
         pointerUrl: POINTER_URL, pointerSha256: digest(raw), sourceSha: pointer.sourceSha,
         release: pointer.release, bundleSha256: pointer.sha256,
-        verifiedAssets, captures,
-        smg: 'captured_verified',
+        verifiedAssets, captures, smg: smgEvidence,
       };
       await writeFile(path.join(OUT, 'baseline-candidate.json'),
         JSON.stringify(evidence, null, 2) + '\n');
       console.log('Legacy visual candidate: ' + pointer.sourceSha + ', captures=' +
-        Object.keys(captures).length + ', SMG=' + evidence.smg);
+        Object.keys(captures).length + ', SMG=' + evidence.smg.status);
     } finally { await browser.close(); }
   } catch (error) {
     await writeFile(path.join(OUT, 'baseline-error.json'),
