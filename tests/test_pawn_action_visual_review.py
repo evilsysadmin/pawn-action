@@ -43,7 +43,8 @@ def capture_fixture(folder):
     mobile = {
         "schema": 1, "pageErrors": [],
         "phases": [{"phase": "cold"}, {"phase": "touch-fire", "shots": 3},
-                   {"phase": "reload"}, {"phase": "touch-fire-after-reload", "shots": 2},
+                   {"phase": "touch-grenade", "throws": 1}, {"phase": "reload"},
+                   {"phase": "touch-fire-after-reload", "shots": 2},
                    {"phase": "portrait", "orientationBlocked": True,
                     "noticeVisible": True, "canvasTouchDisabled": True}],
     }
@@ -108,7 +109,8 @@ class RealReviewTests(unittest.TestCase):
                     self.assertFalse(out.exists())
 
     def test_missing_keyboard_frames_or_touch_proof_blocks_review(self):
-        for fault in ("missing_run", "missing_traversal", "no_touch", "mobile_errors"):
+        for fault in ("missing_run", "missing_traversal", "no_touch",
+                      "no_grenade", "mobile_errors"):
             with tempfile.TemporaryDirectory() as tmp:
                 folder, out = Path(tmp) / "capture", Path(tmp) / "review"
                 capture_fixture(folder)
@@ -125,6 +127,8 @@ class RealReviewTests(unittest.TestCase):
                     value = json.loads(path.read_text())
                     if fault == "no_touch":
                         value["phases"][1]["shots"] = 0
+                    elif fault == "no_grenade":
+                        value["phases"][2]["throws"] = 0
                     else:
                         value["pageErrors"] = ["fake JS crash"]
                 path.write_text(json.dumps(value))
