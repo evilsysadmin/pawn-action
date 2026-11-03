@@ -230,13 +230,24 @@ try {
   await page.keyboard.down('ArrowRight');
   await page.keyboard.down('Space');
   // Capture the complete ascent, apex and landing. No sequential screenshots.
-  await page.waitForTimeout(1450);
+  await page.waitForTimeout(2600);
 } finally {
   await page.keyboard.up('Space');
   await page.keyboard.up('ArrowRight');
   await screencast.send('Page.stopScreencast').catch(() => {});
   await screencast.detach().catch(() => {});
 }
+// Preserve the original compositor samples even when the frame-count or
+// crop gate fails. They are the only trustworthy diagnosis of this visual path.
+const screencastDir = `${outputDir}/jump-screencast-source`;
+await mkdir(screencastDir, { recursive: true });
+for (let i = 0; i < jumpFrames.length; i += 1) {
+  await writeFile(`${screencastDir}/frame-${String(i).padStart(3, '0')}.png`, jumpFrames[i]);
+}
+await writeFile(`${screencastDir}/capture.json`, JSON.stringify({
+  source: 'chromium-cdp-compositor', sourceFrameCount: jumpFrames.length,
+  durationMs: 2600, selectedFrameCount: 16,
+}, null, 2) + '\n');
 if (jumpFrames.length < 16) {
   throw new Error('Chromium screencast delivered fewer than 16 real jump frames: ' + jumpFrames.length);
 }
