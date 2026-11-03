@@ -56,6 +56,7 @@ PANELS = {
     "mobile": [
         ("Touch ready", "mobile-landscape-ready.png"),
         ("Touch fire", "mobile-landscape-fire.png"),
+        ("Touch grenade", "mobile-landscape-grenade.png"),
         ("Touch after reload", "mobile-landscape-reload.png"),
         ("Rotate guidance", "mobile-portrait-rotate.png"),
     ],
@@ -101,10 +102,12 @@ def validate_metadata(directory):
             or not isinstance(mobile.get("phases"), list)):
         raise ReviewError("Mobile evidence incomplete")
     phases = {p.get("phase"): p for p in mobile["phases"] if isinstance(p, dict)}
-    if (not {"cold", "touch-fire", "reload", "touch-fire-after-reload",
+    if (not {"cold", "touch-fire", "touch-grenade", "reload", "touch-fire-after-reload",
              "portrait"}.issubset(phases)
             or any(type(phases[k].get("shots")) is not int or phases[k]["shots"] < 1
                    for k in ("touch-fire", "touch-fire-after-reload"))
+            or type(phases["touch-grenade"].get("throws")) is not int
+            or phases["touch-grenade"]["throws"] < 1
             or phases["portrait"].get("orientationBlocked") is not True
             or phases["portrait"].get("noticeVisible") is not True
             or phases["portrait"].get("canvasTouchDisabled") is not True):
