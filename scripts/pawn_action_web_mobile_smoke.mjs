@@ -99,10 +99,19 @@ try {
   results.phases.push({ phase: 'touch-fire-after-reload', ...await fireViaTouch() });
   await page.screenshot({ path: outputDir + '/mobile-landscape-reload.png' });
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(500);
-  await page.screenshot({ path: outputDir + '/mobile-portrait-rotate.png' });
-  const portrait = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+  // Godot opens its mobile Web window fullscreen. Chromium rejects resizing
+  // that window in place, so use a fresh real portrait mobile context.
+  const portraitContext = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true, hasTouch: true, deviceScaleFactor: 1,
+  });
+  const portraitPage = await portraitContext.newPage();
+  portraitPage.on('pageerror', (error) => pageErrors.push(String(error)));
+  await portraitPage.goto(indexUrl, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+  await portraitPage.waitForSelector('canvas.is-ready', { state: 'visible', timeout: 60_000 });
+  await portraitPage.screenshot({ path: outputDir + '/mobile-portrait-rotate.png' });
+  const portrait = await portraitPage.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+  await portraitContext.close();
   if (portrait.width >= portrait.height) {
     throw new Error('Portrait resize failed: ' + JSON.stringify(portrait));
   }
