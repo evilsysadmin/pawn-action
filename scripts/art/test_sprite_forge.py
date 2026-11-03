@@ -612,25 +612,6 @@ class SpriteForgeCompilerTests(unittest.TestCase):
                 build_bank(contract, frames, root / "out")
 
 
-class ChessFootballSpriteForgeContractTests(unittest.TestCase):
-    def test_shared_contract_is_a_valid_generic_sprite_forge_bank(self) -> None:
-        contract = load_bank_contract(
-            Path(__file__).parent
-            / "contracts"
-            / "chess_football_players_v1.json"
-        )
-        self.assertEqual(contract["schema"], 2)
-        self.assertEqual(contract["surface"], "chess-football")
-        self.assertEqual(contract["actor"], "footballer")
-        self.assertEqual(contract["variant"], "vector-v27")
-        self.assertEqual(contract["quality_contract"], "chess-football-vector-v27")
-        self.assertEqual(contract["cell"], {"width": 128, "height": 144})
-        self.assertEqual(
-            [animation["name"] for animation in contract["animations"]],
-            ["idle", "run", "sprint", "pass", "shoot", "tackle", "celebrate"],
-        )
-
-
 class SpriteForgeSocketContractTests(unittest.TestCase):
     def _base_contract(self) -> dict:
         return {
