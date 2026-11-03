@@ -117,6 +117,8 @@ try {
       height: innerHeight,
       orientationBlocked: document.documentElement.classList.contains('pawn-action-portrait'),
       noticeVisible: Boolean(notice && getComputedStyle(notice).display !== 'none'),
+      noticeOnTop: Boolean(document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.closest('#rotate-notice')),
+      fullscreenElement: document.fullscreenElement?.id || null,
       noticeText: notice?.textContent?.replace(/\s+/g, ' ').trim() || '',
       canvasTouchDisabled: getComputedStyle(document.getElementById('canvas')).pointerEvents === 'none',
     };
@@ -126,6 +128,8 @@ try {
     portrait.width >= portrait.height ||
     !portrait.orientationBlocked ||
     !portrait.noticeVisible ||
+    !portrait.noticeOnTop ||
+    portrait.fullscreenElement !== null ||
     !portrait.noticeText.includes('GIRA EL MÓVIL') ||
     !portrait.canvasTouchDisabled
   ) {
