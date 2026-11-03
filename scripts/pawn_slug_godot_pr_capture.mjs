@@ -215,26 +215,28 @@ const landedBefore = await page.evaluate(() =>
   window.__pawnSlugCaptureEvents.filter((type) => type === 'player-landed').length);
 await page.keyboard.down('ArrowRight');
 await page.keyboard.down('Space');
+// IMPORTANT: screenshots must start while the jump is happening. Waiting for
+// the 80px event *before* screenshotting missed the entire airborne window
+// under Chromium/SwiftShader GPU readback latency despite a green physics gate.
+// Hold SPACE throughout sampling; confirm the physical event afterwards.
 try {
-  await page.waitForFunction((before) =>
-    window.__pawnSlugCaptureEvents.filter((type) => type === 'player-airborne').length > before,
-    airborneBefore, { timeout: 4_000 });
-  // Let the sprite settle into a visibly airborne pose before the first PNG.
-  await page.waitForTimeout(90);
+  for (let frame = 0; frame < 16; frame += 1) {
+    const label = `55-smg-jump-fall-${String(frame).padStart(2, '0')}`;
+    await capture(label);
+    if ([0, 3, 7, 11, 15].includes(frame)) {
+      await captureDetailedCloseup(label, jumpStage.canvas, { followPlayer: frame >= 8 });
+    }
+    await page.waitForTimeout(35);
+  }
 } finally {
   await page.keyboard.up('Space');
+  await page.keyboard.up('ArrowRight');
 }
 const airborneAfter = await page.evaluate(() =>
   window.__pawnSlugCaptureEvents.filter((type) => type === 'player-airborne').length);
-for (let frame = 0; frame < 16; frame += 1) {
-  const label = `55-smg-jump-fall-${String(frame).padStart(2, '0')}`;
-  await capture(label);
-  if ([0, 3, 7, 11, 15].includes(frame)) {
-    await captureDetailedCloseup(label, jumpStage.canvas, { followPlayer: frame >= 8 });
-  }
-  await page.waitForTimeout(55);
+if (airborneAfter <= airborneBefore) {
+  throw new Error('Real SMG jump never ascended 80px during screenshot sampling');
 }
-await page.keyboard.up('ArrowRight');
 await page.waitForFunction((before) =>
   window.__pawnSlugCaptureEvents.filter((type) => type === 'player-landed').length > before,
   landedBefore, { timeout: 4_000 });
