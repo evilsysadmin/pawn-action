@@ -16,3 +16,39 @@ This repository is the new owner of the game previously developed as **Pawn Slug
 The previous Web release and asset keys (including `pawn-slug-godot`) remain valid until a validated Pawn Action replacement is published and consumers have switched. Never delete source/CI from Chess Studio or repoint production before a headless Godot test, Web smoke, and visual acceptance have passed.
 
 See [AGENTS.md](AGENTS.md) for repository instructions.
+
+## R2 publisher ownership (pre-cutover)
+
+The **runtime compatibility IDs remain legacy** (`pawn-slug-godot` bridge event,
+`PAWN_SLUG_STAGE`, atlas logical IDs and existing sprite URLs). The **new Web
+release namespace is separate**:
+
+| Owner | Release objects | Mutable pointer |
+| --- | --- | --- |
+| Chess Studio (legacy rollback) | `pawn-slug-godot/releases/` | `pawn-slug-godot/current.json` |
+| Pawn Action (new standalone) | `pawn-action/releases/` | `pawn-action/current.json` |
+
+`scripts/pawn_slug_godot_bundle.py` checks and constructs immutable bundles
+without credentials in dry-run mode:
+
+```sh
+python3 -S scripts/pawn_slug_godot_bundle.py self-test
+python3 -S scripts/pawn_slug_godot_bundle.py check
+python3 -S scripts/pawn_slug_godot_bundle.py publish --dry-run
+```
+
+The `publish` command rejects all prefixes except exactly `pawn-action`,
+including `pawn-slug-godot`. Actual writes additionally require
+`--confirm-publish`; this is **not** an authorization to run it during the
+migration. The default R2 configuration is still copied from Chess Studio
+and points at its **shared bucket**, so an independently owned/authorized
+destination, credentials, release retention protection (including the live
+Chess Studio cleanup policy), browser/visual approval, and rollback must be
+confirmed before any live upload. No CI workflow publishes to R2.
+
+An existing `pawn-action/current.json` must validate before being updated.
+Only a verified remote 404 is accepted as an absent pointer: 403, 500,
+network errors and malformed JSON stop publication. This does not implement
+distributed compare-and-swap; ensure that only **one** designated publisher
+can write the Pawn Action pointer, and never enable both repositories to
+publish the legacy pointer.
