@@ -137,6 +137,31 @@ jobs:
             --out visual-evidence/review \
             --source-sha "$REVIEW_SOURCE_SHA" \
             --run-id "$GITHUB_RUN_ID"
+      # A read-only fresh Chess Studio reference, NOT an approved visual baseline.
+      # External CDN faults must not mask our own deterministic Godot/browser gates.
+      - name: Reconstruct legacy Chess Studio visual candidate (read-only)
+        if: always() && success()
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          PAWN_ACTION_LEGACY_CAPTURE_DIR: legacy-baseline-candidate
+          PAWN_ACTION_CURRENT_CAPTURE_DIR: visual-evidence
+          PAWN_ACTION_CURRENT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          node --check scripts/pawn_action_legacy_baseline_capture.mjs
+          node scripts/pawn_action_legacy_baseline_capture.mjs --self-test
+          node scripts/pawn_action_legacy_baseline_capture.mjs
+          python3 scripts/pawn_action_legacy_comparison.py \
+            --legacy-dir legacy-baseline-candidate \
+            --current-dir visual-evidence \
+            --current-sha "$PAWN_ACTION_CURRENT_SHA"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: pawn-action-legacy-visual-candidate
+          path: legacy-baseline-candidate/
+          if-no-files-found: warn
+          retention-days: 21
       - uses: actions/upload-artifact@v7
         if: always()
         with:
