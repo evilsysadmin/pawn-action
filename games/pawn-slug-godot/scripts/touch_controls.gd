@@ -19,6 +19,7 @@ var _fire := false
 var _grenade := false
 var _touch_enabled := false
 var _orientation_blocked := false
+var _orientation_poll_remaining := 0.0
 var _rotate_notice: PanelContainer
 
 func _ready() -> void:
@@ -31,6 +32,28 @@ func _ready() -> void:
     _build_ui()
     get_viewport().size_changed.connect(_layout_controls)
     _layout_controls()
+
+func _process(delta: float) -> void:
+    if not _touch_enabled or not OS.has_feature("web"):
+        return
+    # Godot's 16:9 viewport can remain the same size while the real browser
+    # rotates. Poll sparingly because viewport.size_changed may not fire.
+    _orientation_poll_remaining -= delta
+    if _orientation_poll_remaining > 0.0:
+        return
+    _orientation_poll_remaining = 0.25
+    var view := get_viewport().get_visible_rect().size
+    var blocked := view.y > view.x or _browser_portrait()
+    if blocked != _orientation_blocked:
+        _layout_controls()
+
+func _browser_portrait() -> bool:
+    if not OS.has_feature("web"):
+        return false
+    return bool(JavaScriptBridge.eval(
+        "Boolean(window.__pawnSlugPortraitBlocked && window.__pawnSlugPortraitBlocked())",
+        true,
+    ))
 
 func move_axis() -> float:
     var axis := 0.0
@@ -222,7 +245,7 @@ func _layout_controls() -> void:
     if _root == null:
         return
     var view := get_viewport().get_visible_rect().size
-    _orientation_blocked = view.y > view.x
+    _orientation_blocked = view.y > view.x or _browser_portrait()
     if _orientation_blocked:
         release_all()
     if _left_group != null:
