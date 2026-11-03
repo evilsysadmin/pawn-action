@@ -17,7 +17,7 @@ Chromium con ratón, teclado y touch, y guarda el artifact
 - `review-motion.jpg`: secuencia temporal de carrera y salto, no
   una única imagen representativa
 - `review-mobile.jpg`: landscape listo, disparo real,
-  recarga y aviso de rotación portrait
+  lanzamiento de granada por touch, recarga y aviso de rotación portrait
 - `review-manifest.json`: SHA exacto del HEAD de la PR (no el SHA del
   merge sintético de GitHub), run ID, dimensiones y SHA-256 del
   PNG **original** para cada captura usada
@@ -26,7 +26,7 @@ Chromium con ratón, teclado y touch, y guarda el artifact
 Se valida también el manifest de captura real `runtime-visual-health.json`
 y la prueba móvil `mobile-web-smoke.json`. Un frame obligatorio ausente,
 manifiesto duplicado, screenshot corrupto, dimensiones equivocadas, un
-toque que no dispare o una prueba de orientación fallida hacen que el
+toque que no dispare, granada sin evento real o una prueba de orientación fallida hacen que el
 paso del review falle. El artifact crudo se sube incluso al fallar para
 diagnóstico. La retención sube de 5 a 21 días para permitir la revisión.
 
