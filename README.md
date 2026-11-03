@@ -38,13 +38,27 @@ python3 -S scripts/pawn_slug_godot_bundle.py publish --dry-run
 ```
 
 The `publish` command rejects all prefixes except exactly `pawn-action`,
-including `pawn-slug-godot`. Actual writes additionally require
-`--confirm-publish`; this is **not** an authorization to run it during the
-migration. The default R2 configuration is still copied from Chess Studio
-and points at its **shared bucket**, so an independently owned/authorized
-destination, credentials, release retention protection (including the live
-Chess Studio cleanup policy), browser/visual approval, and rollback must be
-confirmed before any live upload. No CI workflow publishes to R2.
+including `pawn-slug-godot`. Credential-less `check` and `publish --dry-run`
+remain available. **Live writes fail closed** unless all these independent
+conditions are met:
+
+- `--confirm-publish` is supplied explicitly.
+- `PAWN_ACTION_R2_PUBLISH_BUCKET` exactly matches the reviewed config's
+  `bucket`; `PAWN_ACTION_R2_PUBLISH_DOMAIN` exactly matches its
+  `customDomain` (hostname only, no `https://`).
+- Dedicated `PAWN_ACTION_CLOUDFLARE_API_TOKEN` and
+  `PAWN_ACTION_CLOUDFLARE_ACCOUNT_ID` are present in the **Pawn Action**
+  publisher environment. Generic `CLOUDFLARE_API_TOKEN` and
+  `CLOUDFLARE_ACCOUNT_ID` inherited from Chess Studio are **ignored**.
+
+These are safeguards, **not** permission to cut over. The R2 configuration
+is still copied from Chess Studio and points at the **shared bucket**.
+A shared destination can be explicitly approved only after assigning an
+independently authorized, appropriately scoped token to this repository,
+confirming the `pawn-action/` prefix is protected from Chess Studio GC,
+and reviewing retention, browser/visual parity and rollback. API-token scope
+and single-writer ownership require external verification: environment
+variable matches do not prove either one. No CI workflow publishes to R2.
 
 An existing `pawn-action/current.json` must validate before being updated.
 Only a verified remote 404 is accepted as an absent pointer: 403, 500,

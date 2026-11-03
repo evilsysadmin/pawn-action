@@ -147,6 +147,35 @@ def _authorize_publish(prefix: str, *, dry_run: bool, confirmed: bool) -> None:
         raise BundleError("Live R2 publication requires --confirm-publish (manual cutover gate)")
 
 
+
+def _require_publish_authority(config: dict[str, Any]) -> tuple[str, str]:
+    """Require a deliberate Pawn Action destination and dedicated credentials.
+
+    The cloned Chess Studio config may still name the shared R2 bucket. A
+    generic CLOUDFLARE_API_TOKEN must never silently authorize a new writer.
+    """
+    bucket = config.get("bucket")
+    domain = config.get("customDomain")
+    approved_bucket = os.environ.get("PAWN_ACTION_R2_PUBLISH_BUCKET", "").strip()
+    approved_domain = os.environ.get("PAWN_ACTION_R2_PUBLISH_DOMAIN", "").strip()
+    if not approved_bucket or not approved_domain:
+        raise BundleError(
+            "Live Pawn Action publish requires PAWN_ACTION_R2_PUBLISH_BUCKET "
+            "and PAWN_ACTION_R2_PUBLISH_DOMAIN explicitly approved for this repo"
+        )
+    if approved_bucket != bucket or approved_domain != domain:
+        raise BundleError("Pawn Action R2 publish destination does not match approved bucket/domain")
+    token = os.environ.get("PAWN_ACTION_CLOUDFLARE_API_TOKEN", "").strip()
+    account_id = os.environ.get("PAWN_ACTION_CLOUDFLARE_ACCOUNT_ID", "").strip()
+    if not token or not account_id:
+        raise BundleError(
+            "Live Pawn Action publish requires dedicated "
+            "PAWN_ACTION_CLOUDFLARE_API_TOKEN / PAWN_ACTION_CLOUDFLARE_ACCOUNT_ID; "
+            "legacy CLOUDFLARE_* credentials are not accepted"
+        )
+    return token, account_id
+
+
 def _fetch_existing_pointer(token: str, account_id: str, bucket: str,
                             pointer_key: str, base_url: str, prefix: str) -> dict[str, Any] | None:
     try:
@@ -169,13 +198,16 @@ def publish(build_dir: pathlib.Path, config_path: pathlib.Path, prefix: str,
             dry_run: bool, confirmed: bool = False) -> dict[str, Any]:
     _authorize_publish(prefix, dry_run=dry_run, confirmed=confirmed)
     config = core.load_config(config_path)
+    # Refuse accidental live writes before reading/building an export or
+    # making any Cloudflare request. Credential-less dry runs stay usable.
+    credentials = None if dry_run else _require_publish_authority(config)
     base_url = f"https://{config['customDomain']}"
     pointer = build_pointer(build_dir, base_url, prefix, os.environ.get("GITHUB_SHA", "").lower())
     if dry_run:
         print(json.dumps(pointer, indent=2, sort_keys=True))
         return pointer
 
-    token, account_id = core.require_env()
+    token, account_id = credentials
     bucket = config["bucket"]
     pointer_key = f"{prefix.strip('/')}/{POINTER_NAME}"
     existing = _fetch_existing_pointer(token, account_id, bucket, pointer_key, base_url, prefix)
@@ -266,6 +298,54 @@ def self_test() -> None:
         _authorize_publish(DEFAULT_PREFIX, dry_run=True, confirmed=False)
         _authorize_publish(DEFAULT_PREFIX, dry_run=False, confirmed=True)
         from unittest.mock import patch
+        # A --confirm-publish flag alone is deliberately insufficient.
+        # The legacy generic secrets must not authorize the new repository.
+        approved = {
+            "PAWN_ACTION_R2_PUBLISH_BUCKET": "pawnaction-test",
+            "PAWN_ACTION_R2_PUBLISH_DOMAIN": "pawn-action.example.test",
+            "PAWN_ACTION_CLOUDFLARE_API_TOKEN": "isolated-test-token",
+            "PAWN_ACTION_CLOUDFLARE_ACCOUNT_ID": "isolated-test-account",
+        }
+        target = {"bucket": "pawnaction-test", "customDomain": "pawn-action.example.test"}
+
+        def expect_authority_rejection(env: dict[str, str], config: dict[str, str] = target) -> None:
+            with patch.dict(os.environ, env, clear=True):
+                try:
+                    _require_publish_authority(config)
+                except BundleError:
+                    pass
+                else:
+                    raise AssertionError("Unauthorized Pawn Action R2 destination/credentials accepted")
+
+        expect_authority_rejection({})
+        expect_authority_rejection({
+            "CLOUDFLARE_API_TOKEN": "legacy-token",
+            "CLOUDFLARE_ACCOUNT_ID": "legacy-account",
+        })
+        for variable in approved:
+            incomplete = dict(approved)
+            incomplete.pop(variable)
+            expect_authority_rejection(incomplete)
+        expect_authority_rejection(
+            approved, {"bucket": "legacy-bucket", "customDomain": target["customDomain"]})
+        expect_authority_rejection(
+            approved, {"bucket": target["bucket"], "customDomain": "legacy.example.test"})
+        with patch.dict(os.environ, approved, clear=True):
+            assert _require_publish_authority(target) == (
+                "isolated-test-token", "isolated-test-account")
+        # Live publish must fail BEFORE attempting any Cloudflare I/O when
+        # explicitly confirmed but with no dedicated repository authority.
+        with patch.dict(os.environ, {}, clear=True), patch.object(
+            core, "get_object", side_effect=AssertionError("unexpected remote GET")
+        ), patch.object(
+            core, "upload_object", side_effect=AssertionError("unexpected remote PUT")
+        ):
+            try:
+                publish(root, DEFAULT_CONFIG, DEFAULT_PREFIX, dry_run=False, confirmed=True)
+            except BundleError:
+                pass
+            else:
+                raise AssertionError("Live publish accepted without dedicated authority")
         pointer_key = f"{DEFAULT_PREFIX}/{POINTER_NAME}"
         with patch.object(core, "get_object", side_effect=core.PublishError(
             f"Cloudflare GET HTTP 404 para {pointer_key}"
