@@ -107,10 +107,10 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - name: Capture real Pawn Action gameplay in Chromium
+      - name: Capture real Pawn Action gameplay and mobile input in Chromium
         if: github.event_name == 'pull_request'
         shell: bash
-        timeout-minutes: 6
+        timeout-minutes: 12
         run: |
           set -euo pipefail
           npm ci --prefix e2e --ignore-scripts
@@ -123,12 +123,14 @@ jobs:
             sleep 1
           done
           PAWN_SLUG_CAPTURE_DIR="$GITHUB_WORKSPACE/visual-evidence" PAWN_SLUG_CAPTURE_STAGES=industrial_front_v1 node scripts/pawn_slug_godot_pr_capture.mjs
+          node --check scripts/pawn_action_web_mobile_smoke.mjs
+          PAWN_SLUG_CAPTURE_DIR="$GITHUB_WORKSPACE/visual-evidence" node scripts/pawn_action_web_mobile_smoke.mjs
       - uses: actions/upload-artifact@v7
-        if: github.event_name == 'pull_request' && success()
+        if: github.event_name == 'pull_request' && always()
         with:
           name: pawn-action-real-visual-evidence
           path: visual-evidence/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 5
       - uses: actions/upload-artifact@v7
         with:
