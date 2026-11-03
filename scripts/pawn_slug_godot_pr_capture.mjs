@@ -82,10 +82,12 @@ async function capture(label) {
   captures.push({ label, path, kind: 'overview' });
 }
 
-async function captureDetailedCloseup(label, canvas) {
+async function captureDetailedCloseup(label, canvas, { followPlayer = false } = {}) {
   const path = `${outputDir}/${label}-closeup.png`;
+  // The camera centers Matthias once he leaves the starting area. A fixed
+  // left-edge crop would show only enemies during later jump frames.
   const clip = {
-    x: Math.max(0, canvas.x),
+    x: Math.max(0, canvas.x + (followPlayer ? Math.min(canvas.width * 0.25, 360) : 0)),
     y: Math.max(0, canvas.y + canvas.height * 0.38),
     width: Math.min(canvas.width * 0.52, 560),
     height: Math.min(canvas.height * 0.58, 420),
@@ -121,6 +123,7 @@ for (let frame = 0; frame < 12; frame += 1) {
 
 // Fire while still moving so pistol-vs-SMG silhouette mistakes, bad muzzle
 // alignment, or one-shot animation pops are visible frame-by-frame.
+const pistolShotsBefore = await page.evaluate(() => window.__pawnSlugCaptureEvents.filter((type) => type === 'player-fired').length);
 await page.keyboard.down('z');
 for (let frame = 0; frame < 12; frame += 1) {
   const label = `20-run-fire-${String(frame).padStart(2, '0')}`;
@@ -129,6 +132,10 @@ for (let frame = 0; frame < 12; frame += 1) {
   await page.waitForTimeout(55);
 }
 await page.keyboard.up('z');
+const pistolShotsAfter = await page.evaluate(() => window.__pawnSlugCaptureEvents.filter((type) => type === 'player-fired').length);
+if (pistolShotsAfter <= pistolShotsBefore) {
+  throw new Error('Pawn Action Web: real keyboard pistol fire never reached Godot');
+}
 await page.keyboard.up('ArrowRight');
 await page.waitForTimeout(260);
 await capture('30-idle-after-run-fire');
@@ -171,6 +178,7 @@ for (let frame = 0; frame < 13; frame += 1) {
   await page.waitForTimeout(48);
 }
 
+const smgShotsBefore = await page.evaluate(() => window.__pawnSlugCaptureEvents.filter((type) => type === 'player-fired').length);
 await page.keyboard.down('z');
 for (let frame = 0; frame < 13; frame += 1) {
   const label = `53-smg-run-fire-${String(frame).padStart(2, '0')}`;
@@ -179,6 +187,10 @@ for (let frame = 0; frame < 13; frame += 1) {
   await page.waitForTimeout(55);
 }
 await page.keyboard.up('z');
+const smgShotsAfter = await page.evaluate(() => window.__pawnSlugCaptureEvents.filter((type) => type === 'player-fired').length);
+if (smgShotsAfter <= smgShotsBefore) {
+  throw new Error('Pawn Action Web: real keyboard SMG fire never reached Godot');
+}
 await page.keyboard.up('ArrowRight');
 await page.waitForTimeout(120);
 await capture('54-smg-idle');
@@ -194,7 +206,7 @@ await page.keyboard.up('Space');
 for (let frame = 0; frame < 16; frame += 1) {
   const label = `55-smg-jump-fall-${String(frame).padStart(2, '0')}`;
   await capture(label);
-  if ([0, 3, 7, 11, 15].includes(frame)) await captureDetailedCloseup(label, smgStage.canvas);
+  if ([0, 3, 7, 11, 15].includes(frame)) await captureDetailedCloseup(label, smgStage.canvas, { followPlayer: true });
   await page.waitForTimeout(55);
 }
 await page.keyboard.up('ArrowRight');
