@@ -1,0 +1,16 @@
+# Godot generated state
+**/.godot/
+**/build/
+**/.import/
+*.tmp
+*.log
+
+# Local tooling
+.godot-ci/
+.venv/
+__pycache__/
+.pytest_cache/
+node_modules/
+.env
+.env.*
+!.env.example
