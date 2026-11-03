@@ -102,13 +102,13 @@ jobs:
           for name in index.html index.js index.wasm index.pck; do
             test -s "games/pawn-slug-godot/build/web/$name"
           done
+      # Both PR and main-push releases must pass the same *real Chromium* gate.
+      # Infra must never accredit a main Web export without touch/lifecycle proof.
       - name: Set up Node for real Web visual capture
-        if: github.event_name == 'pull_request'
         uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Capture real Pawn Action gameplay and mobile input in Chromium
-        if: github.event_name == 'pull_request'
         shell: bash
         timeout-minutes: 12
         run: |
@@ -126,7 +126,7 @@ jobs:
           node --check scripts/pawn_action_web_mobile_smoke.mjs
           PAWN_SLUG_CAPTURE_DIR="$GITHUB_WORKSPACE/visual-evidence" node scripts/pawn_action_web_mobile_smoke.mjs
       - uses: actions/upload-artifact@v7
-        if: github.event_name == 'pull_request' && always()
+        if: always()
         with:
           name: pawn-action-real-visual-evidence
           path: visual-evidence/
