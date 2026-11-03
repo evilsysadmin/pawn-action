@@ -14,14 +14,19 @@ Chromium con ratón, teclado y touch, y guarda el artifact
 - `review-desktop.jpg`: idle, carrera, disparo, crouch, SMG,
   salto/aterrizaje y escenario industrial con tramo de travesía
 - `review-closeups.jpg`: anclajes y escala de Matthias entre armas
-- `review-motion.jpg`: secuencia temporal de carrera y salto, no
-  una única imagen representativa
+- `review-motion.jpg`: secuencia temporal de carrera y salto en una zona despejada,
+  acreditado por evento real de Godot tras subir al menos 80 px y aterrizar
 - `review-mobile.jpg`: landscape listo, disparo real,
   lanzamiento de granada por touch, recarga y aviso de rotación portrait
 - `review-manifest.json`: SHA exacto del HEAD de la PR (no el SHA del
   merge sintético de GitHub), run ID, dimensiones y SHA-256 del
   PNG **original** para cada captura usada
 - `README.md`: instrucciones de revisión y estado pendiente
+
+Se valida también la subida física y aterrizaje en `runtime-visual-health.json`
+mediante los eventos `player-airborne` y `player-landed` de Godot (no basta
+con pulsar SPACE ni etiquetar un fotograma como salto). La captura de aterrizaje
+sigue al actor en vez de mostrar un recorte vacío.
 
 Se valida también el manifest de captura real `runtime-visual-health.json`
 y la prueba móvil `mobile-web-smoke.json`. Un frame obligatorio ausente,

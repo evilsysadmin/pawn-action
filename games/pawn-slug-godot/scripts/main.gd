@@ -216,6 +216,7 @@ func _ready() -> void:
     player.connect("game_over", Callable(self, "_on_player_game_over"))
     player.connect("weapon_changed", Callable(self, "_on_player_weapon_changed"))
     player.connect("landed", Callable(self, "_on_player_landed"))
+    player.connect("jump_height_reached", Callable(self, "_on_player_jump_height_reached"))
     player.connect("checkpoint_changed", Callable(self, "_on_player_checkpoint_changed"))
     _apply_visual_capture_probe()
     pause_menu.connect("exit_requested", Callable(self, "_on_pause_exit_requested"))
@@ -470,7 +471,11 @@ func _on_player_hurt(_current_hp: int, _max_hp: int) -> void:
     _sync_hud()
     _notify_parent("player-hurt")
 
+func _on_player_jump_height_reached(_height: float) -> void:
+    _notify_parent("player-airborne")
+
 func _on_player_landed(intensity: float) -> void:
+    _notify_parent("player-landed")
     combat_audio.play_land(intensity)
     _add_camera_kick(Vector2(0.0, 1.0), lerpf(1.0, 4.5, clampf(intensity, 0.0, 1.0)))
 

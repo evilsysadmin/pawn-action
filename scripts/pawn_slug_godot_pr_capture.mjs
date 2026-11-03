@@ -36,8 +36,11 @@ await page.addInitScript(() => {
     alpine_fortress_v1: 4200,
     jungle_relay_v1: 3820,
   };
-  window.__pawnSlugVisualProbeX =
+  const jumpProbe = params.get('jumpProbe') === '1';
+  window.__pawnSlugVisualProbeX = jumpProbe ? 110 :
     params.get('visualProbe') === '1' ? traversalProbes[stage] ?? null : null;
+  // Keep the jump camera probe free from combat without affecting production.
+  window.__pawnSlugVisualProbeCalmRadius = jumpProbe ? 950 : null;
   window.__pawnSlugVisualProbeWeapon = params.get('weaponProbe') || '';
   window.addEventListener('message', (event) => {
     const data = event.data;
@@ -49,13 +52,15 @@ await page.addInitScript(() => {
   });
 });
 
-function urlForStage(stageId, { visualProbe = false, weaponProbe = '' } = {}) {
+function urlForStage(stageId, { visualProbe = false, weaponProbe = '', jumpProbe = false } = {}) {
   const url = new URL(indexUrl);
   url.searchParams.set('stage', stageId);
   if (visualProbe) url.searchParams.set('visualProbe', '1');
   else url.searchParams.delete('visualProbe');
   if (weaponProbe) url.searchParams.set('weaponProbe', weaponProbe);
   else url.searchParams.delete('weaponProbe');
+  if (jumpProbe) url.searchParams.set('jumpProbe', '1');
+  else url.searchParams.delete('jumpProbe');
   return url.toString();
 }
 
@@ -196,23 +201,51 @@ await page.waitForTimeout(120);
 await capture('54-smg-idle');
 await captureDetailedCloseup('54-smg-idle', smgStage.canvas);
 
-// Exercise the exact SMG jump/fall/land transition that has regressed before.
-// Keep horizontal motion active so a body-scale jump, frozen legs or a weapon
-// overlap is visible against the same moving silhouette used in real play.
+// Capture jump from a fresh, enemy-calm starting lane instead of the area
+// reached after running and firing, where overhead platforms may cancel lift.
+// A real Godot bridge event fires only after >=80 px of physics ascent.
+const jumpStage = await loadStage(detailedStage, { weaponProbe: 'machinegun', jumpProbe: true });
+if (!(await page.evaluate(() => window.__pawnSlugCaptureEvents.includes('weapon-changed')))) {
+  throw new Error('SMG jump probe did not equip machinegun');
+}
+await jumpStage.canvasLocator.click({ position: { x: jumpStage.canvas.width / 2, y: jumpStage.canvas.height / 2 } });
+const airborneBefore = await page.evaluate(() =>
+  window.__pawnSlugCaptureEvents.filter((type) => type === 'player-airborne').length);
+const landedBefore = await page.evaluate(() =>
+  window.__pawnSlugCaptureEvents.filter((type) => type === 'player-landed').length);
 await page.keyboard.down('ArrowRight');
 await page.keyboard.down('Space');
-await page.waitForTimeout(220);
-await page.keyboard.up('Space');
+try {
+  await page.waitForFunction((before) =>
+    window.__pawnSlugCaptureEvents.filter((type) => type === 'player-airborne').length > before,
+    airborneBefore, { timeout: 4_000 });
+  // Let the sprite settle into a visibly airborne pose before the first PNG.
+  await page.waitForTimeout(90);
+} finally {
+  await page.keyboard.up('Space');
+}
+const airborneAfter = await page.evaluate(() =>
+  window.__pawnSlugCaptureEvents.filter((type) => type === 'player-airborne').length);
 for (let frame = 0; frame < 16; frame += 1) {
   const label = `55-smg-jump-fall-${String(frame).padStart(2, '0')}`;
   await capture(label);
-  if ([0, 3, 7, 11, 15].includes(frame)) await captureDetailedCloseup(label, smgStage.canvas, { followPlayer: true });
+  if ([0, 3, 7, 11, 15].includes(frame)) {
+    await captureDetailedCloseup(label, jumpStage.canvas, { followPlayer: frame >= 8 });
+  }
   await page.waitForTimeout(55);
 }
 await page.keyboard.up('ArrowRight');
-await page.waitForTimeout(180);
+await page.waitForFunction((before) =>
+  window.__pawnSlugCaptureEvents.filter((type) => type === 'player-landed').length > before,
+  landedBefore, { timeout: 4_000 });
+const landedAfter = await page.evaluate(() =>
+  window.__pawnSlugCaptureEvents.filter((type) => type === 'player-landed').length);
+await page.waitForTimeout(100);
 await capture('56-smg-landed');
-await captureDetailedCloseup('56-smg-landed', smgStage.canvas);
+await captureDetailedCloseup('56-smg-landed', jumpStage.canvas, { followPlayer: true });
+const jumpProof = {
+  minHeightPx: 80, airborneBefore, airborneAfter, landedBefore, landedAfter,
+};
 
 // Capture one representative traversal sector where the new industrial
 // ladder, pit mouth and stepping-route platforms share the same viewport.
@@ -254,6 +287,7 @@ await writeFile(
   `${JSON.stringify({
     schema: 7,
     detailedStage,
+    jumpProof,
     stageOverviews,
     captures,
   }, null, 2)}\n`,

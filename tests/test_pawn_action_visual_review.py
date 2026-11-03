@@ -33,6 +33,8 @@ def capture_fixture(folder):
     labels += ["extra-" + str(i) for i in range(65)]
     desktop = {
         "schema": 7, "detailedStage": "industrial_front_v1",
+        "jumpProof": {"minHeightPx": 80, "airborneBefore": 0,
+                      "airborneAfter": 1, "landedBefore": 0, "landedAfter": 1},
         "captures": [{"label": name, "path": "/runner/visual-evidence/" + name + ".png"}
                      for name in labels],
         "stageOverviews": [
@@ -109,19 +111,27 @@ class RealReviewTests(unittest.TestCase):
                     self.assertFalse(out.exists())
 
     def test_missing_keyboard_frames_or_touch_proof_blocks_review(self):
-        for fault in ("missing_run", "missing_traversal", "no_touch",
+        for fault in ("missing_run", "missing_traversal", "no_jump",
+                      "no_landing", "short_jump", "no_touch",
                       "no_grenade", "mobile_errors"):
             with tempfile.TemporaryDirectory() as tmp:
                 folder, out = Path(tmp) / "capture", Path(tmp) / "review"
                 capture_fixture(folder)
-                if fault in ("missing_run", "missing_traversal"):
+                if fault in ("missing_run", "missing_traversal", "no_jump",
+                             "no_landing", "short_jump"):
                     path = folder / "runtime-visual-health.json"
                     value = json.loads(path.read_text())
                     if fault == "missing_run":
                         value["captures"] = [x for x in value["captures"]
                                              if x["label"] != "10-run-07-closeup"]
-                    else:
+                    elif fault == "missing_traversal":
                         value["stageOverviews"] = value["stageOverviews"][:1]
+                    elif fault == "no_jump":
+                        value["jumpProof"]["airborneAfter"] = 0
+                    elif fault == "no_landing":
+                        value["jumpProof"]["landedAfter"] = 0
+                    elif fault == "short_jump":
+                        value["jumpProof"]["minHeightPx"] = 20
                 else:
                     path = folder / "mobile-web-smoke.json"
                     value = json.loads(path.read_text())

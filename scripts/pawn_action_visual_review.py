@@ -80,6 +80,15 @@ def validate_metadata(directory):
             or not isinstance(desktop.get("stageOverviews"), list)
             or len(desktop["stageOverviews"]) < 2):
         raise ReviewError("Desktop Chromium evidence incomplete")
+    jump = desktop.get("jumpProof")
+    if (not isinstance(jump, dict)
+            or type(jump.get("minHeightPx")) is not int
+            or jump["minHeightPx"] < 80
+            or any(type(jump.get(k)) is not int or jump[k] < 0 for k in (
+                "airborneBefore", "airborneAfter", "landedBefore", "landedAfter"))
+            or jump["airborneAfter"] <= jump["airborneBefore"]
+            or jump["landedAfter"] <= jump["landedBefore"]):
+        raise ReviewError("Missing verified airborne jump / landing proof")
     names = []
     for row in desktop["captures"]:
         if (not isinstance(row, dict) or not isinstance(row.get("label"), str)

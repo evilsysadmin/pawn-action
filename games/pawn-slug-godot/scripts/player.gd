@@ -11,6 +11,7 @@ signal respawned(current_hp: int, max_hp: int, lives_remaining: int)
 signal game_over
 signal weapon_changed(weapon_id: String, ammo_remaining: int)
 signal landed(intensity: float)
+signal jump_height_reached(height: float)
 
 const MatthiasArt := preload("res://scripts/matthias_art.gd")
 const MOVE_SPEED := 330.0
@@ -30,6 +31,7 @@ const GROUND_ACCEL := 2200.0
 const AIR_ACCEL := 1350.0
 const GROUND_DECEL := 2800.0
 const JUMP_SPEED := 610.0
+const JUMP_VISUAL_PROOF_MIN_HEIGHT := 80.0
 const GRAVITY := 1550.0
 const COYOTE_TIME := 0.10
 const JUMP_BUFFER_TIME := 0.12
@@ -128,6 +130,7 @@ var _spawn_position := Vector2.ZERO
 var _checkpoint_position := Vector2.ZERO
 var _coyote_remaining := 0.0
 var _jump_buffer_remaining := 0.0
+var _jump_takeoff_y := INF
 var _jump_was_pressed := false
 var _drop_through_remaining := 0.0
 var _drop_through_body: PhysicsBody2D
@@ -241,6 +244,7 @@ func _physics_process(delta: float) -> void:
         _jump_buffer_remaining = maxf(0.0, _jump_buffer_remaining - delta)
 
     if _jump_buffer_remaining > 0.0 and _coyote_remaining > 0.0 and not _crouching:
+        _jump_takeoff_y = global_position.y
         velocity.y = -JUMP_SPEED
         _jump_buffer_remaining = 0.0
         _coyote_remaining = 0.0
@@ -250,6 +254,14 @@ func _physics_process(delta: float) -> void:
 
     var landing_speed := maxf(0.0, velocity.y)
     move_and_slide()
+    # Browser visual QA must prove meaningful elevation, not merely a keypress.
+    # Emit once per real jump; normal movement and physics remain unchanged.
+    if _jump_takeoff_y < INF:
+        if not is_on_floor() and _jump_takeoff_y - global_position.y >= JUMP_VISUAL_PROOF_MIN_HEIGHT:
+            jump_height_reached.emit(_jump_takeoff_y - global_position.y)
+            _jump_takeoff_y = INF
+        elif is_on_floor():
+            _jump_takeoff_y = INF
     if _check_fall_death():
         return
     _update_crouch_state()
