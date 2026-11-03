@@ -190,7 +190,7 @@ func _ready() -> void:
     _reduced_motion = _prefers_reduced_motion()
     var selected_stage := _selected_stage_id()
     if not _load_stage_manifest(selected_stage):
-        push_error("Pawn Slug stage manifest failed; using minimal safe fallback")
+        push_error("Pawn Action stage manifest failed; using minimal safe fallback")
     _build_stage_geometry()
     var traversal_manager = get_node_or_null("TraversalManager")
     if traversal_manager != null and traversal_manager.has_method("configure_stage"):

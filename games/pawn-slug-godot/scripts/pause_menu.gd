@@ -98,7 +98,7 @@ func _build_ui() -> void:
     panel.add_child(shell)
 
     var eyebrow := Label.new()
-    eyebrow.text = "PAWN SLUG · PAUSA"
+    eyebrow.text = "PAWN ACTION · PAUSA"
     eyebrow.add_theme_font_size_override("font_size", 13)
     eyebrow.add_theme_color_override("font_color", Color("b99a59"))
     shell.add_child(eyebrow)
@@ -145,7 +145,7 @@ func _render_options() -> void:
     mode_button.grab_focus()
 
     var hint := Label.new()
-    hint.text = "Pawn Slug ya ocupa todo el viewport. El fullscreen nativo del navegador es opcional y sólo se activa desde aquí."
+    hint.text = "Pawn Action ya ocupa todo el viewport. El fullscreen nativo del navegador es opcional y sólo se activa desde aquí."
     hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     hint.add_theme_font_size_override("font_size", 13)
     hint.add_theme_color_override("font_color", Color("aeb6b8"))
