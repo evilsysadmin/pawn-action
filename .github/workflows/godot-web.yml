@@ -36,6 +36,14 @@ jobs:
           python3 -S scripts/pawn_slug_godot_2d_gate.py
           python3 -S scripts/pawn_slug_enemy_roster_gate.py self-test
           python3 -S scripts/pawn_slug_enemy_roster_gate.py
+      - name: Web release manifest and sprite pipeline self-tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -S scripts/pawn_slug_godot_bundle.py self-test
+          python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: 'Pillow==13.0.0'
+          python3 scripts/art/test_sprite_forge.py
+          python3 scripts/art/sprite_forge_acceptance.py --self-test
       - name: Install pinned Godot 4.7.2 editor
         shell: bash
         run: |
