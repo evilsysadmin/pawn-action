@@ -1,0 +1,1050 @@
+{
+  "id": "industrial_front_v1",
+  "version": 2,
+  "theme": "night_front",
+  "world": {
+    "width": 5200,
+    "height": 720,
+    "floor_y": 610,
+    "start_x": 110,
+    "floor_depth": 110,
+    "boundary_thickness": 40
+  },
+  "checkpoints": [
+    110,
+    1480,
+    2980,
+    4140
+  ],
+  "platforms": [
+    {
+      "x": 260,
+      "y": 545,
+      "w": 110,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "metal",
+      "one_way": true
+    },
+    {
+      "x": 338,
+      "y": 480,
+      "w": 96,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "metal",
+      "one_way": true
+    },
+    {
+      "x": 420,
+      "y": 520,
+      "w": 190,
+      "h": 24,
+      "kind": "low_catwalk",
+      "material": "metal",
+      "visual": {
+        "rail": true,
+        "lamp": true,
+        "sandbags": 5
+      }
+    },
+    {
+      "x": 520,
+      "y": 342,
+      "w": 132,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "metal",
+      "one_way": true
+    },
+    {
+      "x": 670,
+      "y": 456,
+      "w": 160,
+      "h": 24,
+      "kind": "catwalk",
+      "material": "stone",
+      "visual": {
+        "rail": true
+      }
+    },
+    {
+      "x": 790,
+      "y": 370,
+      "w": 96,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "wood",
+      "one_way": true
+    },
+    {
+      "x": 900,
+      "y": 400,
+      "w": 220,
+      "h": 24,
+      "kind": "high_catwalk",
+      "material": "metal",
+      "visual": {
+        "rail": true,
+        "lamp": true
+      }
+    },
+    {
+      "x": 1090,
+      "y": 318,
+      "w": 126,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "stone",
+      "one_way": true
+    },
+    {
+      "x": 1180,
+      "y": 476,
+      "w": 150,
+      "h": 24,
+      "kind": "catwalk",
+      "material": "wood",
+      "visual": {
+        "rail": true
+      }
+    },
+    {
+      "x": 1370,
+      "y": 520,
+      "w": 250,
+      "h": 24,
+      "kind": "low_catwalk",
+      "material": "concrete",
+      "visual": {
+        "rail": true,
+        "lamp": true
+      }
+    },
+    {
+      "x": 1470,
+      "y": 455,
+      "w": 104,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "concrete",
+      "one_way": true
+    },
+    {
+      "x": 1572,
+      "y": 392,
+      "w": 92,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "metal",
+      "one_way": true
+    },
+    {
+      "x": 1660,
+      "y": 446,
+      "w": 160,
+      "h": 24,
+      "kind": "catwalk",
+      "material": "concrete",
+      "route": "climb"
+    },
+    {
+      "x": 1740,
+      "y": 360,
+      "w": 90,
+      "h": 24,
+      "kind": "climb_catwalk",
+      "material": "metal",
+      "route": "climb",
+      "visual": {
+        "rail": true
+      }
+    },
+    {
+      "x": 1840,
+      "y": 280,
+      "w": 150,
+      "h": 24,
+      "kind": "climb_catwalk",
+      "material": "metal",
+      "route": "climb",
+      "visual": {
+        "rail": true,
+        "lamp": true
+      }
+    },
+    {
+      "x": 1840,
+      "y": 366,
+      "w": 220,
+      "h": 24,
+      "kind": "high_catwalk",
+      "material": "metal",
+      "visual": {
+        "rail": true,
+        "lamp": true
+      }
+    },
+    {
+      "x": 1970,
+      "y": 330,
+      "w": 155,
+      "h": 24,
+      "kind": "climb_catwalk",
+      "material": "wood",
+      "route": "climb"
+    },
+    {
+      "x": 2130,
+      "y": 488,
+      "w": 180,
+      "h": 24,
+      "kind": "catwalk",
+      "material": "metal",
+      "visual": {
+        "rail": true
+      },
+      "one_way": true
+    },
+    {
+      "x": 2180,
+      "y": 392,
+      "w": 118,
+      "h": 20,
+      "kind": "broken_service_step",
+      "material": "metal",
+      "one_way": true,
+      "route": "pit_bypass"
+    },
+    {
+      "x": 2318,
+      "y": 338,
+      "w": 112,
+      "h": 20,
+      "kind": "broken_service_step",
+      "material": "wood",
+      "one_way": true,
+      "route": "pit_bypass"
+    },
+    {
+      "x": 2380,
+      "y": 430,
+      "w": 140,
+      "h": 24,
+      "kind": "catwalk",
+      "material": "wood"
+    },
+    {
+      "x": 2455,
+      "y": 368,
+      "w": 96,
+      "h": 20,
+      "kind": "broken_service_step",
+      "material": "metal",
+      "one_way": true
+    },
+    {
+      "x": 2580,
+      "y": 458,
+      "w": 250,
+      "h": 24,
+      "kind": "catwalk",
+      "material": "concrete",
+      "visual": {
+        "lamp": true,
+        "sandbags": 5
+      }
+    },
+    {
+      "x": 2712,
+      "y": 382,
+      "w": 100,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "wood",
+      "one_way": true
+    },
+    {
+      "x": 2870,
+      "y": 510,
+      "w": 150,
+      "h": 24,
+      "kind": "low_catwalk",
+      "material": "stone"
+    },
+    {
+      "x": 3050,
+      "y": 390,
+      "w": 220,
+      "h": 24,
+      "kind": "high_catwalk",
+      "material": "metal",
+      "visual": {
+        "rail": true,
+        "lamp": true
+      }
+    },
+    {
+      "x": 3200,
+      "y": 320,
+      "w": 96,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "metal",
+      "one_way": true
+    },
+    {
+      "x": 3330,
+      "y": 452,
+      "w": 150,
+      "h": 24,
+      "kind": "catwalk",
+      "material": "metal",
+      "visual": {
+        "rail": true
+      }
+    },
+    {
+      "x": 3450,
+      "y": 362,
+      "w": 96,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "metal",
+      "one_way": true
+    },
+    {
+      "x": 3510,
+      "y": 512,
+      "w": 230,
+      "h": 24,
+      "kind": "low_catwalk",
+      "material": "concrete",
+      "visual": {
+        "sandbags": 5
+      },
+      "one_way": true
+    },
+    {
+      "x": 3710,
+      "y": 326,
+      "w": 138,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "metal",
+      "one_way": true,
+      "visual": {
+        "rail": true
+      }
+    },
+    {
+      "x": 3820,
+      "y": 426,
+      "w": 220,
+      "h": 24,
+      "kind": "catwalk",
+      "material": "metal",
+      "visual": {
+        "rail": true,
+        "lamp": true
+      },
+      "one_way": true
+    },
+    {
+      "x": 3920,
+      "y": 342,
+      "w": 86,
+      "h": 20,
+      "kind": "broken_service_step",
+      "material": "metal",
+      "one_way": true,
+      "route": "pit_bypass"
+    },
+    {
+      "x": 4008,
+      "y": 294,
+      "w": 86,
+      "h": 20,
+      "kind": "broken_service_step",
+      "material": "wood",
+      "one_way": true,
+      "route": "pit_bypass"
+    },
+    {
+      "x": 4110,
+      "y": 358,
+      "w": 150,
+      "h": 24,
+      "kind": "high_catwalk",
+      "material": "stone",
+      "visual": {
+        "rail": true
+      }
+    },
+    {
+      "x": 4310,
+      "y": 498,
+      "w": 200,
+      "h": 24,
+      "kind": "catwalk",
+      "material": "metal",
+      "visual": {
+        "rail": true,
+        "lamp": true
+      }
+    },
+    {
+      "x": 4420,
+      "y": 306,
+      "w": 124,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "stone",
+      "one_way": true,
+      "visual": {
+        "rail": true
+      }
+    },
+    {
+      "x": 4600,
+      "y": 456,
+      "w": 130,
+      "h": 24,
+      "kind": "catwalk",
+      "material": "concrete"
+    },
+    {
+      "x": 4750,
+      "y": 406,
+      "w": 300,
+      "h": 24,
+      "kind": "high_catwalk",
+      "material": "wood",
+      "visual": {
+        "rail": true,
+        "lamp": true
+      }
+    }
+  ],
+  "obstacles": [
+    {
+      "x": 930,
+      "y": 558,
+      "w": 48,
+      "h": 52,
+      "kind": "crate"
+    },
+    {
+      "x": 1070,
+      "y": 542,
+      "w": 64,
+      "h": 68,
+      "kind": "barricade"
+    },
+    {
+      "x": 3220,
+      "y": 552,
+      "w": 86,
+      "h": 58,
+      "kind": "barricade"
+    },
+    {
+      "x": 3600,
+      "y": 528,
+      "w": 60,
+      "h": 82,
+      "kind": "crate_stack"
+    },
+    {
+      "x": 4210,
+      "y": 548,
+      "w": 70,
+      "h": 62,
+      "kind": "sandbags"
+    },
+    {
+      "x": 4860,
+      "y": 546,
+      "w": 58,
+      "h": 64,
+      "kind": "barrels"
+    }
+  ],
+  "enemies": [
+    {
+      "x": 780,
+      "type": "pawn"
+    },
+    {
+      "x": 1120,
+      "type": "pawn"
+    },
+    {
+      "x": 1320,
+      "type": "scout"
+    },
+    {
+      "x": 1510,
+      "type": "knight"
+    },
+    {
+      "x": 1760,
+      "type": "grenadier"
+    },
+    {
+      "x": 1900,
+      "type": "rook",
+      "y": 280,
+      "route": "climb"
+    },
+    {
+      "x": 2110,
+      "type": "pawn",
+      "idle_pose": "sit",
+      "idle_reaction": 0.86
+    },
+    {
+      "x": 2250,
+      "type": "pawn"
+    },
+    {
+      "x": 2380,
+      "type": "bishop"
+    },
+    {
+      "x": 2515,
+      "type": "knight"
+    },
+    {
+      "x": 2590,
+      "type": "rook",
+      "y": 458
+    },
+    {
+      "x": 2730,
+      "type": "grenadier"
+    },
+    {
+      "x": 2820,
+      "type": "commando"
+    },
+    {
+      "x": 2890,
+      "type": "knight"
+    },
+    {
+      "x": 3070,
+      "type": "pawn"
+    },
+    {
+      "x": 3130,
+      "type": "scout",
+      "idle_pose": "lean",
+      "idle_reaction": 0.94
+    },
+    {
+      "x": 3210,
+      "type": "pawn"
+    },
+    {
+      "x": 3335,
+      "type": "pawn"
+    },
+    {
+      "x": 3430,
+      "type": "rook"
+    },
+    {
+      "x": 3560,
+      "type": "knight"
+    },
+    {
+      "x": 3680,
+      "type": "pawn"
+    },
+    {
+      "x": 3740,
+      "type": "bishop"
+    },
+    {
+      "x": 3820,
+      "type": "commando"
+    },
+    {
+      "x": 3950,
+      "type": "queen"
+    },
+    {
+      "x": 4070,
+      "type": "knight",
+      "idle_pose": "rest",
+      "idle_reaction": 1.02
+    },
+    {
+      "x": 4190,
+      "type": "rook"
+    },
+    {
+      "x": 4285,
+      "type": "shield"
+    },
+    {
+      "x": 4380,
+      "type": "grenadier"
+    }
+  ],
+  "pickups": [
+    {
+      "x": 1240,
+      "y": 566,
+      "type": "machinegun"
+    },
+    {
+      "x": 1810,
+      "y": 566,
+      "type": "grenade"
+    },
+    {
+      "x": 2470,
+      "y": 566,
+      "type": "shotgun"
+    },
+    {
+      "x": 3300,
+      "y": 566,
+      "type": "medkit"
+    },
+    {
+      "x": 3500,
+      "y": 566,
+      "type": "panzerfaust"
+    },
+    {
+      "x": 4310,
+      "y": 566,
+      "type": "grenade"
+    },
+    {
+      "x": 1915,
+      "y": 236,
+      "type": "grenade",
+      "route": "climb",
+      "optional": true
+    }
+  ],
+  "boss": {
+    "x": 4580,
+    "hp": 780,
+    "width": 190,
+    "height": 150,
+    "trigger_x": 4440,
+    "arena_left": 4010,
+    "arena_right": 5080
+  },
+  "extraction": {
+    "x": 5050
+  },
+  "backdrop": {
+    "preset": "night_front",
+    "seed": 17,
+    "layers": [
+      {
+        "kind": "sky",
+        "scroll": 0.02,
+        "z": -80,
+        "intensity": 1
+      },
+      {
+        "kind": "industrial_art",
+        "scroll": 0.055,
+        "z": -74,
+        "intensity": 1.08
+      },
+      {
+        "kind": "far_ridge",
+        "scroll": 0.115,
+        "z": -70,
+        "intensity": 1
+      },
+      {
+        "kind": "ruined_city",
+        "scroll": 0.29,
+        "z": -55,
+        "intensity": 1.05
+      },
+      {
+        "kind": "mid_defence",
+        "scroll": 0.56,
+        "z": -32,
+        "intensity": 1.08
+      },
+      {
+        "kind": "near_weather",
+        "scroll": 0.82,
+        "z": -8,
+        "intensity": 0.92
+      },
+      {
+        "kind": "near_foreground",
+        "scroll": 1,
+        "z": -4,
+        "intensity": 1.04
+      }
+    ]
+  },
+  "setpieces": [
+    {
+      "id": "factory-lift",
+      "type": "moving_platform",
+      "x": 2280,
+      "y": 330,
+      "w": 150,
+      "h": 22,
+      "travel_x": 0,
+      "travel_y": 120,
+      "period": 4.8,
+      "phase": 0.1
+    },
+    {
+      "id": "armored-convoy",
+      "type": "convoy",
+      "trigger_x": 1500,
+      "start_x": 2240,
+      "end_x": 1180,
+      "y": 606,
+      "w": 160,
+      "h": 72,
+      "speed": 330
+    },
+    {
+      "id": "pillbox-01",
+      "type": "bunker_turret",
+      "x": 3480,
+      "y": 610,
+      "w": 132,
+      "h": 84,
+      "hp": 210,
+      "trigger_x": 2950,
+      "range": 820,
+      "cooldown_min": 0.78,
+      "cooldown_max": 1.12,
+      "reaction": 0.75
+    },
+    {
+      "id": "counterattack",
+      "type": "reinforcement_wave",
+      "trigger_x": 3880,
+      "reaction": 0.55,
+      "enemies": [
+        {
+          "x": 3740,
+          "type": "pawn"
+        },
+        {
+          "x": 3980,
+          "type": "commando"
+        },
+        {
+          "x": 4080,
+          "type": "scout"
+        }
+      ]
+    },
+    {
+      "id": "service-bridge",
+      "type": "collapse_bridge",
+      "x": 2720,
+      "y": 332,
+      "w": 190,
+      "h": 24,
+      "trigger_x": 2940,
+      "warning": 0.72,
+      "fall_gravity": 980
+    },
+    {
+      "id": "factory-tunnel",
+      "type": "tunnel_portal",
+      "x": 3260,
+      "y": 610,
+      "w": 330,
+      "h": 220
+    },
+    {
+      "id": "blast-wall",
+      "type": "destructible_barricade",
+      "x": 2360,
+      "y": 548,
+      "w": 92,
+      "h": 62,
+      "hp": 105
+    },
+    {
+      "id": "service-deck",
+      "type": "destructible_platform",
+      "x": 3350,
+      "y": 330,
+      "w": 170,
+      "h": 24,
+      "hp": 78
+    },
+    {
+      "id": "factory-barrage",
+      "type": "artillery_barrage",
+      "trigger_x": 2820,
+      "min_x": 2740,
+      "max_x": 3540,
+      "salvos": 3,
+      "telegraph": 0.95,
+      "interval": 0.86,
+      "radius": 86,
+      "damage": 95,
+      "lead": 90
+    }
+  ],
+  "visual_revision": 6,
+  "dressing": [
+    {
+      "kind": "crate",
+      "x": 540,
+      "y": 607,
+      "size": 32
+    },
+    {
+      "kind": "crate",
+      "x": 1180,
+      "y": 607,
+      "size": 36
+    },
+    {
+      "kind": "barrel",
+      "x": 1258,
+      "y": 608
+    },
+    {
+      "kind": "crate",
+      "x": 1820,
+      "y": 607,
+      "size": 40
+    },
+    {
+      "kind": "crate",
+      "x": 2460,
+      "y": 607,
+      "size": 32
+    },
+    {
+      "kind": "barrel",
+      "x": 2538,
+      "y": 608
+    },
+    {
+      "kind": "crate",
+      "x": 3100,
+      "y": 607,
+      "size": 36
+    },
+    {
+      "kind": "crate",
+      "x": 3740,
+      "y": 607,
+      "size": 40
+    },
+    {
+      "kind": "barrel",
+      "x": 3818,
+      "y": 608
+    },
+    {
+      "kind": "crate",
+      "x": 4380,
+      "y": 607,
+      "size": 32
+    },
+    {
+      "kind": "crate",
+      "x": 5020,
+      "y": 607,
+      "size": 36
+    },
+    {
+      "kind": "barrel",
+      "x": 5098,
+      "y": 608
+    },
+    {
+      "kind": "sandbags",
+      "x": 940,
+      "y": 607,
+      "count": 6
+    },
+    {
+      "kind": "sandbags",
+      "x": 1760,
+      "y": 607,
+      "count": 6
+    },
+    {
+      "kind": "sandbags",
+      "x": 2580,
+      "y": 607,
+      "count": 6
+    },
+    {
+      "kind": "sandbags",
+      "x": 3400,
+      "y": 607,
+      "count": 6
+    },
+    {
+      "kind": "sandbags",
+      "x": 4220,
+      "y": 607,
+      "count": 6
+    },
+    {
+      "kind": "sandbags",
+      "x": 5040,
+      "y": 607,
+      "count": 6
+    }
+  ],
+  "story_props": [
+    {
+      "kind": "front_wreck",
+      "x": 760,
+      "y": 608
+    },
+    {
+      "kind": "front_wreck",
+      "x": 1740,
+      "y": 608
+    },
+    {
+      "kind": "front_wreck",
+      "x": 2720,
+      "y": 608
+    },
+    {
+      "kind": "front_wreck",
+      "x": 3700,
+      "y": 608
+    },
+    {
+      "kind": "front_wreck",
+      "x": 4680,
+      "y": 608
+    },
+    {
+      "kind": "industrial_bunker",
+      "layer": "architecture",
+      "x": 150,
+      "y": 468,
+      "w": 190,
+      "h": 142,
+      "lamp_x": 252,
+      "lamp_y": 498,
+      "sandbags": 7
+    },
+    {
+      "kind": "industrial_watch_post",
+      "layer": "architecture",
+      "x": 1038,
+      "base_y": 610,
+      "top_y": 346,
+      "leg_span": 82,
+      "hut_w": 106,
+      "hut_h": 62
+    },
+    {
+      "kind": "industrial_drain",
+      "layer": "architecture",
+      "x": 420,
+      "y": 674,
+      "radius": 25
+    },
+    {
+      "kind": "industrial_drain",
+      "layer": "architecture",
+      "x": 840,
+      "y": 674,
+      "radius": 25
+    },
+    {
+      "kind": "industrial_drain",
+      "layer": "architecture",
+      "x": 1260,
+      "y": 674,
+      "radius": 25
+    },
+    {
+      "kind": "industrial_rubble_field",
+      "layer": "architecture",
+      "x": 90,
+      "y": 608,
+      "count": 18,
+      "spacing": 83
+    }
+  ],
+  "ladders": [
+    {
+      "x": 1822,
+      "top_y": 280,
+      "bottom_y": 610,
+      "w": 30,
+      "exit_dir": 1,
+      "kind": "service_ladder"
+    },
+    {
+      "x": 3032,
+      "top_y": 390,
+      "bottom_y": 610,
+      "w": 30,
+      "exit_dir": 1,
+      "kind": "access_ladder"
+    },
+    {
+      "x": 720,
+      "top_y": 456,
+      "bottom_y": 610,
+      "w": 30,
+      "exit_dir": 1,
+      "kind": "access_ladder"
+    },
+    {
+      "x": 1200,
+      "top_y": 476,
+      "bottom_y": 610,
+      "w": 30,
+      "exit_dir": -1,
+      "kind": "service_ladder"
+    },
+    {
+      "x": 3390,
+      "top_y": 452,
+      "bottom_y": 610,
+      "w": 30,
+      "exit_dir": 1,
+      "kind": "access_ladder"
+    },
+    {
+      "x": 3740,
+      "top_y": 326,
+      "bottom_y": 610,
+      "w": 30,
+      "exit_dir": -1,
+      "kind": "service_ladder"
+    }
+  ],
+  "pits": [
+    {
+      "x": 2100,
+      "w": 200,
+      "kind": "shell_crater"
+    },
+    {
+      "x": 3790,
+      "w": 190,
+      "kind": "bombed_trench"
+    }
+  ]
+}
