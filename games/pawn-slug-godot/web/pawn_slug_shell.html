@@ -50,16 +50,67 @@
       border-top: 2px solid rgba(185, 154, 91, 0.72);
       padding-top: 10px;
     }
+
+    #rotate-notice {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 24px;
+      box-sizing: border-box;
+      background: #171b1f;
+      color: #e7dabb;
+      font: 500 16px/1.5 system-ui, sans-serif;
+      text-align: center;
+    }
+
+    #rotate-notice strong {
+      color: #d4b16b;
+      font-size: clamp(24px, 7vw, 36px);
+      letter-spacing: 0.08em;
+    }
+
+    html.pawn-action-portrait #rotate-notice {
+      display: flex;
+    }
+
+    html.pawn-action-portrait #canvas {
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
   <canvas id="canvas" tabindex="0" aria-label="$GODOT_PROJECT_NAME"></canvas>
   <div id="boot" aria-hidden="true"><span>PAWN ACTION</span></div>
+  <div id="rotate-notice" role="status" aria-live="polite">
+    <strong>GIRA EL MÓVIL</strong>
+    <span>Pawn Action se juega en horizontal.</span>
+  </div>
   <script src="$GODOT_URL"></script>
   <script>
     (() => {
       const canvas = document.getElementById("canvas");
       const boot = document.getElementById("boot");
+      const isTouchDevice = () => Boolean(
+        (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
+        navigator.maxTouchPoints > 0
+      );
+      // Godot's fixed 16:9 canvas stays landscape even on portrait phones.
+      // The real browser viewport must be the authority for orientation.
+      window.__pawnSlugPortraitBlocked = () =>
+        isTouchDevice() && window.innerHeight > window.innerWidth;
+      const syncOrientation = () => {
+        document.documentElement.classList.toggle(
+          'pawn-action-portrait', window.__pawnSlugPortraitBlocked()
+        );
+      };
+      window.addEventListener('resize', syncOrientation);
+      window.addEventListener('orientationchange', syncOrientation);
+      syncOrientation();
       window.__pawnSlugGodotVisualReady = () => {
         canvas.classList.add("is-ready");
         if (boot) boot.classList.add("is-hidden");
