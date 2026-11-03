@@ -98,6 +98,10 @@ async function installProbe(page) {
   await page.addInitScript(() => {
     window.__legacyReady = false;
     window.__legacyEvents = [];
+    // The legacy Godot bootstrap reads this JS bridge variable, not the URL.
+    // Keep the query parameter as explicit capture intent and bridge it here.
+    window.__pawnSlugVisualProbeWeapon =
+      new URLSearchParams(window.location.search).get('weaponProbe') || '';
     window.addEventListener('message', event => {
       if (event.data?.source !== 'pawn-slug-godot') return;
       const type = String(event.data?.type || '');
@@ -163,19 +167,20 @@ async function main() {
       await smg.waitForFunction(() => window.__legacyReady === true, null, { timeout: 45000 });
       await smg.waitForTimeout(900);
       const weaponChange = await smg.evaluate(() => window.__legacyEvents.includes('weapon-changed'));
-      if (weaponChange) {
-        const image = await smg.screenshot({ fullPage: false });
-        await writeFile(path.join(OUT, '51-smg-selected.png'), image);
-        captures['51-smg-selected.png'] = { sha256: digest(image), bytes: image.length,
-          viewport: { width: 1280, height: 720 }, stage: 'industrial_front_v1',
-          verified: 'weapon-changed bridge event' };
+      if (!weaponChange) {
+        throw new Error('Legacy SMG comparison not proven: no Godot weapon-changed event');
       }
+      const image = await smg.screenshot({ fullPage: false });
+      await writeFile(path.join(OUT, '51-smg-selected.png'), image);
+      captures['51-smg-selected.png'] = { sha256: digest(image), bytes: image.length,
+        viewport: { width: 1280, height: 720 }, stage: 'industrial_front_v1',
+        verified: 'weapon-changed bridge event' };
       const evidence = {
         schema: 1, status: 'candidate_not_approved', owner: 'chess-studio',
         pointerUrl: POINTER_URL, pointerSha256: digest(raw), sourceSha: pointer.sourceSha,
         release: pointer.release, bundleSha256: pointer.sha256,
         verifiedAssets, captures,
-        smg: weaponChange ? 'captured' : 'not_proven',
+        smg: 'captured_verified',
       };
       await writeFile(path.join(OUT, 'baseline-candidate.json'),
         JSON.stringify(evidence, null, 2) + '\n');

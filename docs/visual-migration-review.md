@@ -36,6 +36,34 @@ toque que no dispare, granada sin evento real o una prueba de orientación falli
 paso del review falle. El artifact crudo se sube incluso al fallar para
 diagnóstico. La retención sube de 5 a 21 días para permitir la revisión.
 
+## Candidato Web vivo de Chess Studio (no aprobado)
+
+La CI de Pawn Action incorpora una captura de referencia **solo de lectura**
+mediante `scripts/pawn_action_legacy_baseline_capture.mjs`. Consulta
+exclusivamente `https://assets.chess-studio.shadowops.dpdns.org/pawn-slug-godot/current.json`,
+valida el `sourceSha` de 40 caracteres, el release inmutable, host, claves y
+SHA-256/bytes reales de `index.html`, `index.js`, `index.wasm` e
+`index.pck` **antes de abrir Chromium**. No utiliza tokens ni escribe en R2.
+
+Captura idle, carrera, carrera+disparo, equipamiento SMG (exige el evento real
+`weapon-changed`) y paisaje móvil. El artifact separado
+`pawn-action-legacy-visual-candidate` contiene `baseline-candidate.json`
+con hashes de capturas, procedencia del puntero y
+`side-by-side-candidate.jpg` frente a las capturas del HEAD actual.
+Las escenas y viewports son comparables, pero los tiempos de movimiento
+son independientes y no equivalen a una referencia frame-locked.
+
+El servicio legacy es externo al repo nuevo; el step es opcional y
+`continue-on-error` para no convertir un fallo temporal de su CDN en un
+falso fallo de las pruebas propias de Pawn Action. Un resultado incompleto,
+un evento SMG ausente o un puntero inválido **no produce comparación válida**;
+se retiene `baseline-error.json` y la PR sigue en Draft.
+
+Una captura fresca del release vivo es una *candidata verificable*, nunca
+una aprobación retrospectiva del baseline artístico de Chess Studio.
+La aceptación visual manual debe inspeccionar la comparación en el chat y
+conservar la autoridad de revisión separada de la CI.
+
 ## Comparación que falta
 
 Los JPG son hojas de contacto **generadas de los PNG reales**,

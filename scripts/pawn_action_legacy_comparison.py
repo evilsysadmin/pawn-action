@@ -25,6 +25,7 @@ def comparison(legacy: Path, current: Path, current_sha: str) -> None:
         ("Idle", "00-idle.png", "00-idle.png"),
         ("Run (independent timing)", "10-run.png", "10-run-07.png"),
         ("Run + fire", "20-run-fire.png", "20-run-fire-07.png"),
+        ("SMG selected", "51-smg-selected.png", "51-smg-selected-after-100ms.png"),
         ("Mobile landscape", "mobile-landscape-ready.png", "mobile-landscape-ready.png"),
     ]
     tile_w, tile_h, top = 530, 310, 90
