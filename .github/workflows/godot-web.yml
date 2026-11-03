@@ -87,7 +87,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p games/pawn-slug-godot/build/web
-          "$GITHUB_WORKSPACE/.godot-ci/$GODOT_VERSION/godot" --headless             --path games/pawn-slug-godot --export-release Web             games/pawn-slug-godot/build/web/index.html 2>&1 | tee "$RUNNER_TEMP/godot-export.log"
+          pushd games/pawn-slug-godot >/dev/null
+          "$GITHUB_WORKSPACE/.godot-ci/$GODOT_VERSION/godot" --headless --export-release Web build/web/index.html 2>&1 | tee "$RUNNER_TEMP/godot-export.log"
+          popd >/dev/null
           ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|Parse Error:' "$RUNNER_TEMP/godot-export.log"
           for name in index.html index.js index.wasm index.pck; do
             test -s "games/pawn-slug-godot/build/web/$name"
