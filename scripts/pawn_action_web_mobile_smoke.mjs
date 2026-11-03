@@ -87,6 +87,45 @@ async function fireViaTouch() {
   }
 }
 
+
+/* Real Chromium touch beyond FIRE: the actual Godot grenade signal must fire.
+ * Positions cover viewport, 16:9 letterbox and expanded canvas layouts. */
+async function grenadeViaTouch() {
+  const client = await context.newCDPSession(page);
+  const w = viewport.width;
+  const h = viewport.height;
+  const scale = h / 720;
+  const letterbox = (w - 1280 * scale) / 2;
+  const targets = [
+    { x: w - 84, y: h - 173, layout: 'viewport' },
+    { x: letterbox + 1196 * scale, y: 547 * scale, layout: 'letterbox' },
+    { x: w - 84 * scale, y: h - 173 * scale, layout: 'expanded' },
+  ];
+  try {
+    for (const target of targets) {
+      const before = await page.evaluate(() =>
+        window.__pawnActionEvents.filter((type) => type === 'grenade-thrown').length);
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{ id: 1, x: Math.round(target.x), y: Math.round(target.y) }],
+      });
+      try {
+        await page.waitForTimeout(380);
+      } finally {
+        await client.send('Input.dispatchTouchEvent', {
+          type: 'touchEnd', touchPoints: [],
+        });
+      }
+      const after = await page.evaluate(() =>
+        window.__pawnActionEvents.filter((type) => type === 'grenade-thrown').length);
+      if (after > before) return { target, throws: after - before };
+    }
+    throw new Error('Held touchscreen GR never emitted grenade-thrown from Godot');
+  } finally {
+    await client.detach();
+  }
+}
+
 const results = { schema: 1, viewport, phases: [] };
 try {
   results.phases.push({ phase: 'cold', ...await boot() });
@@ -94,6 +133,9 @@ try {
 
   results.phases.push({ phase: 'touch-fire', ...await fireViaTouch() });
   await page.screenshot({ path: outputDir + '/mobile-landscape-fire.png' });
+
+  results.phases.push({ phase: 'touch-grenade', ...await grenadeViaTouch() });
+  await page.screenshot({ path: outputDir + '/mobile-landscape-grenade.png' });
 
   results.phases.push({ phase: 'reload', ...await boot({ reload: true }) });
   results.phases.push({ phase: 'touch-fire-after-reload', ...await fireViaTouch() });
