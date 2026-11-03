@@ -14,7 +14,8 @@ Chromium con ratón, teclado y touch, y guarda el artifact
 - `review-desktop.jpg`: idle, carrera, disparo, crouch, SMG,
   salto/aterrizaje y escenario industrial con tramo de travesía
 - `review-closeups.jpg`: anclajes y escala de Matthias entre armas
-- `review-motion.jpg`: secuencia temporal de carrera y salto en una zona despejada,
+- `review-motion.jpg`: secuencia temporal de carrera y salto extraída de frames
+  reales de screencast del compositor Chromium en una zona despejada,
   acreditado por evento real de Godot tras subir al menos 80 px y aterrizar
 - `review-mobile.jpg`: landscape listo, disparo real,
   lanzamiento de granada por touch, recarga y aviso de rotación portrait

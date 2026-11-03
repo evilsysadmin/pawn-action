@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 
 const requireFromE2e = createRequire(new URL('../e2e/package.json', import.meta.url));
 const { chromium } = requireFromE2e('playwright');
@@ -213,29 +214,50 @@ const airborneBefore = await page.evaluate(() =>
   window.__pawnSlugCaptureEvents.filter((type) => type === 'player-airborne').length);
 const landedBefore = await page.evaluate(() =>
   window.__pawnSlugCaptureEvents.filter((type) => type === 'player-landed').length);
-await page.keyboard.down('ArrowRight');
-await page.keyboard.down('Space');
-// IMPORTANT: screenshots must start while the jump is happening. Waiting for
-// the 80px event *before* screenshotting missed the entire airborne window
-// under Chromium/SwiftShader GPU readback latency despite a green physics gate.
-// Hold SPACE throughout sampling; confirm the physical event afterwards.
+// Chromium page.screenshot() blocks WebGL readback long enough to miss the
+// entire 80px jump in both previous attempts. Record real compositor frames
+// continuously with CDP; sample them into the existing PNG review contract.
+const screencast = await page.context().newCDPSession(page);
+const jumpFrames = [];
+screencast.on('Page.screencastFrame', ({ data, sessionId }) => {
+  if (jumpFrames.length < 160) jumpFrames.push(Buffer.from(data, 'base64'));
+  void screencast.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
+});
+await screencast.send('Page.startScreencast', {
+  format: 'png', everyNthFrame: 1, maxWidth: 1280, maxHeight: 720,
+});
 try {
-  for (let frame = 0; frame < 16; frame += 1) {
-    const label = `55-smg-jump-fall-${String(frame).padStart(2, '0')}`;
-    await capture(label);
-    if ([0, 3, 7, 11, 15].includes(frame)) {
-      await captureDetailedCloseup(label, jumpStage.canvas, { followPlayer: frame >= 8 });
-    }
-    await page.waitForTimeout(35);
-  }
+  await page.keyboard.down('ArrowRight');
+  await page.keyboard.down('Space');
+  // Capture the complete ascent, apex and landing. No sequential screenshots.
+  await page.waitForTimeout(1450);
 } finally {
   await page.keyboard.up('Space');
   await page.keyboard.up('ArrowRight');
+  await screencast.send('Page.stopScreencast').catch(() => {});
+  await screencast.detach().catch(() => {});
+}
+if (jumpFrames.length < 16) {
+  throw new Error('Chromium screencast delivered fewer than 16 real jump frames: ' + jumpFrames.length);
+}
+for (let frame = 0; frame < 16; frame += 1) {
+  const label = `55-smg-jump-fall-${String(frame).padStart(2, '0')}`;
+  const path = `${outputDir}/${label}.png`;
+  const sampled = Math.round(frame * (jumpFrames.length - 1) / 15);
+  await writeFile(path, jumpFrames[sampled]);
+  captures.push({ label, path, kind: 'overview' });
+}
+execFileSync('python3', ['scripts/pawn_action_jump_screencast_crops.py', outputDir], {
+  stdio: 'inherit',
+});
+for (const frame of [0, 3, 7, 11, 15]) {
+  const label = `55-smg-jump-fall-${String(frame).padStart(2, '0')}-closeup`;
+  captures.push({ label, path: `${outputDir}/${label}.png`, kind: 'player-closeup' });
 }
 const airborneAfter = await page.evaluate(() =>
   window.__pawnSlugCaptureEvents.filter((type) => type === 'player-airborne').length);
 if (airborneAfter <= airborneBefore) {
-  throw new Error('Real SMG jump never ascended 80px during screenshot sampling');
+  throw new Error('Real SMG jump never ascended 80px during compositor recording');
 }
 await page.waitForFunction((before) =>
   window.__pawnSlugCaptureEvents.filter((type) => type === 'player-landed').length > before,
