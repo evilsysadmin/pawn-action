@@ -45,10 +45,17 @@ valida el `sourceSha` de 40 caracteres, el release inmutable, host, claves y
 SHA-256/bytes reales de `index.html`, `index.js`, `index.wasm` e
 `index.pck` **antes de abrir Chromium**. No utiliza tokens ni escribe en R2.
 
-Captura idle, carrera, carrera+disparo y paisaje móvil. Intenta además
-equipamiento SMG, pero solo lo incluye en la comparación si Godot confirma
-`ready` y el evento real `weapon-changed`. Si el legado no alcanza
-`ready` (observado en el export público del 09-10-2026), registra estado
+Captura idle, carrera, carrera+disparo y paisaje móvil. Para SMG usa el
+**pickup real del mapa industrial en x=1240**: posiciona a Matthias cerca
+mediante el probe de posición ya existente, espera el `ready` normal de
+pistola, desplaza al jugador mediante teclado real, exige el evento
+`weapon-changed` tras recoger el arma y, finalmente, exige `player-fired`
+**después** de la recogida. El disparo demuestra que Godot ha recuperado
+su `visual_ready()`, a diferencia del antiguo `weaponProbe=machinegun`
+en cold boot, que podía emitir `weapon-changed` con canvas negro.
+El método no modifica ni inyecta código en el export Web legado.
+
+Si el pickup o el disparo no se acreditan, registra estado
 `candidate_partial_not_approved`, eventos/errores y
 `smg-unverified-diagnostic.png`; no etiqueta un arma no probada.
 El artifact separado

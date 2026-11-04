@@ -100,8 +100,14 @@ async function installProbe(page) {
     window.__legacyEvents = [];
     // The legacy Godot bootstrap reads this JS bridge variable, not the URL.
     // Keep the query parameter as explicit capture intent and bridge it here.
-    window.__pawnSlugVisualProbeWeapon =
-      new URLSearchParams(window.location.search).get('weaponProbe') || '';
+    const probe = new URLSearchParams(window.location.search);
+    window.__pawnSlugVisualProbeWeapon = probe.get('weaponProbe') || '';
+    // Normal pickup path: spawn with pistol 70 px before the authored SMG
+    // pickup at x=1240 (industrial_front_v1), in a combat-free corridor.
+    // Do not grant/equip the gun before Godot's first visual-ready signal.
+    window.__pawnSlugVisualProbeX = probe.get('pickupProbe') === 'machinegun' ? 1170 : null;
+    window.__pawnSlugVisualProbeCalmRadius =
+      probe.get('pickupProbe') === 'machinegun' ? 1000 : null;
     window.addEventListener('message', event => {
       if (event.data?.source !== 'pawn-slug-godot') return;
       const type = String(event.data?.type || '');
@@ -159,9 +165,9 @@ async function main() {
       await installProbe(mobile);
       await capture(mobile, index, 'mobile-landscape-ready.png', captures);
 
-      // An old SMG visual probe may fail to complete cold asset boot.
-      // Treat that single *state* as unproven without discarding verified
-      // pistol/mobile evidence or presenting a fake SMG comparison.
+      // Test the ordinary pickup path, NOT the historical cold-start
+      // weaponProbe which can mark weapon-changed while the screen is black.
+      // The industrial map has an authored machinegun pickup at x=1240.
       const smg = await browser.newPage({ viewport: { width: 1280, height: 720 } });
       const smgErrors = [];
       smg.on('pageerror', error => {
@@ -174,44 +180,78 @@ async function main() {
       });
       await installProbe(smg);
       let smgReady = false;
+      let smgPickup = false;
+      let smgFired = false;
       let smgReason = '';
       try {
-        await smg.goto(index + '&weaponProbe=machinegun', {
+        await smg.goto(index + '&pickupProbe=machinegun', {
           waitUntil: 'domcontentloaded', timeout: 45000,
         });
-        await smg.locator('canvas').waitFor({ state: 'visible', timeout: 25000 });
+        await smg.locator('canvas').waitFor({ state: 'visible', timeout: 45000 });
+        // This must be the pistol's normal first-frame ready, *before*
+        // touching the SMG pickup. No forced selection during bootstrap.
         await smg.waitForFunction(() => window.__legacyReady === true, null, {
-          timeout: 20000,
+          timeout: 45000,
         });
         smgReady = true;
+        await smg.locator('canvas').click({ position: { x: 640, y: 360 } });
+        await smg.keyboard.down('ArrowRight');
+        try {
+          await smg.waitForFunction(() =>
+            window.__legacyEvents.includes('weapon-changed'), null, { timeout: 6500 });
+          smgPickup = true;
+        } finally {
+          await smg.keyboard.up('ArrowRight');
+        }
+
+        // A weapon-changed message proves pickup/selection, but cannot
+        // establish that the large remote SMG atlas finished decoding.
+        // Godot will not emit player-fired while its body is not ready.
+        for (let attempt = 0; attempt < 24 && !smgFired; attempt += 1) {
+          const firedBefore = await smg.evaluate(() =>
+            window.__legacyEvents.filter(type => type === 'player-fired').length);
+          await smg.keyboard.down('z');
+          try { await smg.waitForTimeout(240); }
+          finally { await smg.keyboard.up('z'); }
+          smgFired = await smg.evaluate(before =>
+            window.__legacyEvents.filter(type => type === 'player-fired').length > before,
+            firedBefore);
+          if (!smgFired) await smg.waitForTimeout(450);
+        }
+        if (!smgFired) throw new Error('SMG pickup succeeded, but Godot never fired after 24 pulses');
       } catch (error) {
         smgReason = String(error.message || error);
       }
       const smgEvents = await smg.evaluate(() => (
         Array.isArray(window.__legacyEvents) ? window.__legacyEvents.slice(-50) : []
       )).catch(() => []);
-      const weaponChange = smgReady && smgEvents.includes('weapon-changed');
-      let smgEvidence = { status: 'not_proven', ready: smgReady,
-        weaponChanged: smgEvents.includes('weapon-changed'),
-        events: smgEvents, reason: smgReason || 'missing weapon-changed bridge event',
+      const verifiedSmg = smgReady && smgPickup && smgFired;
+      let smgEvidence = {
+        status: 'not_proven', method: 'pistol_ready_then_authored_pickup_at_x1240',
+        ready: smgReady, weaponChanged: smgPickup, firedAfterPickup: smgFired,
+        events: smgEvents, reason: smgReason || 'missing pickup/shot evidence',
         errors: smgErrors,
       };
-      if (weaponChange) {
-        await smg.waitForTimeout(900);
+      if (verifiedSmg) {
         const image = await smg.screenshot({ fullPage: false });
         await writeFile(path.join(OUT, '51-smg-selected.png'), image);
-        captures['51-smg-selected.png'] = { sha256: digest(image), bytes: image.length,
+        captures['51-smg-selected.png'] = {
+          sha256: digest(image), bytes: image.length,
           viewport: { width: 1280, height: 720 }, stage: 'industrial_front_v1',
-          verified: 'weapon-changed bridge event' };
-        smgEvidence = { status: 'captured_verified', ready: true,
-          weaponChanged: true, events: smgEvents, errors: smgErrors };
+          verified: 'real authored pickup, weapon-changed and player-fired after pistol ready',
+        };
+        smgEvidence = {
+          status: 'captured_verified', method: 'pistol_ready_then_authored_pickup_at_x1240',
+          ready: true, weaponChanged: true, firedAfterPickup: true,
+          events: smgEvents, errors: smgErrors,
+        };
       } else {
         const diagnostic = await smg.screenshot({ fullPage: false }).catch(() => null);
         if (diagnostic) await writeFile(path.join(OUT, 'smg-unverified-diagnostic.png'), diagnostic);
       }
       const evidence = {
         schema: 1,
-        status: weaponChange ? 'candidate_not_approved' : 'candidate_partial_not_approved',
+        status: verifiedSmg ? 'candidate_not_approved' : 'candidate_partial_not_approved',
         owner: 'chess-studio',
         pointerUrl: POINTER_URL, pointerSha256: digest(raw), sourceSha: pointer.sourceSha,
         release: pointer.release, bundleSha256: pointer.sha256,
