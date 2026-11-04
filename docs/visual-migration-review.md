@@ -97,7 +97,11 @@ El antiguo shell Web devuelve a veces screencast 800×600 de la esquina
 superior izquierda (e incluso un primer frame 800×450) aun con viewport
 1280×720; se descartan los que recortan la región de Matthias y se
 conservan **los originales sin escalar**. El manifest registra el tamaño
-real de cada fuente y el fotograma seleccionado. El montaje usa recortes
+real de cada fuente y el fotograma seleccionado. La cantidad de frames
+puede variar por compositor: se requieren al menos seis frames originales
+(cinco con la región completa de Matthias), pero **siempre** se exige
+ascenso real >=80 px y regreso al suelo. No basta con un número de
+fotogramas, una tecla pulsada o un frame aislado. El montaje usa recortes
 **de las mismas coordenadas de píxel** alrededor del actor en ambas
 versiones, evitando falsas diferencias de escala por el tamaño del frame.
 

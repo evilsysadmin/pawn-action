@@ -18,19 +18,19 @@ def picture(path, size=(1280, 720), actor_y=540, torso=True):
     im.save(path, "PNG")
 
 
-def fixture(folder, *, source="legacy", rise=135, landing=True):
+def fixture(folder, *, source="legacy", rise=135, landing=True, count=11):
     frames = folder / "matched-pistol-jump-source"
     frames.mkdir(parents=True)
     (frames / "source.json").write_text(json.dumps({
         "source": "chromium-cdp-compositor",
-        "key": source, "frames": 11,
+        "key": source, "frames": count,
         "viewport": {"width": 1280, "height": 720},
         "stage": "industrial_front_v1", "startX": 110,
         "jumpHoldMs": 850, "postJumpMs": 1250,
     }))
     picture(folder / "60-pistol-jump-idle.png")
     picture(folder / "62-pistol-jump-landed.png", actor_y=540 if landing else 420)
-    for n in range(11):
+    for n in range(count):
         size = (800, 450) if source == "legacy" and n == 0 else (
             (800, 600) if source == "legacy" else (1280, 720))
         y = 540 - rise if 3 <= n <= 5 else 540
@@ -41,7 +41,7 @@ class JumpFrameTests(unittest.TestCase):
     def test_legacy_cropped_frame_keeps_original_bytes_and_measures_height(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            fixture(root)
+            fixture(root, count=8)
             jump.extract(root, "legacy")
             output = json.loads((root / "matched-pistol-jump.json").read_text())
             self.assertGreaterEqual(output["measuredRisePx"], 80)
@@ -59,10 +59,11 @@ class JumpFrameTests(unittest.TestCase):
             jump.extract(root, "current")
             value = json.loads((root / "matched-pistol-jump.json").read_text())
             self.assertEqual(value["apexSourceSize"], [1280, 720])
-        for rise, landed in ((20, True), (135, False)):
-            with self.subTest(rise=rise, landed=landed), tempfile.TemporaryDirectory() as tmp:
+        for rise, landed, count in ((20, True, 8), (135, False, 8),
+                                    (135, True, 5)):
+            with self.subTest(rise=rise, landed=landed, count=count), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
-                fixture(root, rise=rise, landing=landed)
+                fixture(root, rise=rise, landing=landed, count=count)
                 with self.assertRaises(ValueError):
                     jump.extract(root, "legacy")
                 self.assertFalse((root / "61-pistol-jump-apex.png").exists())

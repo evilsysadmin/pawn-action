@@ -63,7 +63,7 @@ def extract(folder, source):
             or meta.get("postJumpMs") != 1250):
         raise ValueError("Mismatch of jump route, timing or source")
     frames = sorted(origin.glob("frame-*.png"))
-    if not 10 <= len(frames) <= 120 or len(frames) != meta.get("frames"):
+    if not 6 <= len(frames) <= 120 or len(frames) != meta.get("frames"):
         raise ValueError("Insufficient compositor frames")
     idle = folder / "60-pistol-jump-idle.png"
     landed = folder / "62-pistol-jump-landed.png"
@@ -84,7 +84,7 @@ def extract(folder, source):
             rise = grounded_y - center
             if best is None or rise > best[0]:
                 best = (rise, frame, center)
-    if len(frames) - skipped_partial < 8:
+    if len(frames) - skipped_partial < 5:
         raise ValueError("Not enough usable complete-ROI compositor frames")
     if best is None or best[0] < MIN_RISE_PX:
         raise ValueError("No authentic vertical ascent of 80px in compositor")
