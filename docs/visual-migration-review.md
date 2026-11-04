@@ -13,7 +13,8 @@ Chromium con ratón, teclado y touch, y guarda el artifact
 
 - `review-desktop.jpg`: idle, carrera, disparo, crouch, SMG,
   salto/aterrizaje y escenario industrial con tramo de travesía
-- `review-closeups.jpg`: anclajes y escala de Matthias entre armas
+- `review-closeups.jpg`: anclajes y escala de Matthias entre armas; incluye
+  close-up tras recoger la SMG real (x=1240)
 - `review-motion.jpg`: secuencia temporal de carrera y salto extraída de frames
   reales de screencast del compositor Chromium en una zona despejada,
   acreditado por evento real de Godot tras subir al menos 80 px y aterrizar
@@ -53,6 +54,13 @@ pistola, desplaza al jugador mediante teclado real, exige el evento
 **después** de la recogida. El disparo demuestra que Godot ha recuperado
 su `visual_ready()`, a diferencia del antiguo `weaponProbe=machinegun`
 en cold boot, que podía emitir `weapon-changed` con canvas negro.
+Pawn Action reproduce la **misma ruta** (spawn x=1170, pickup x=1240,
+1280×720, teclado real, parar con `weapon-changed` y disparar tras
+equipar), y exige `ready`, `weapon-pickup`, `weapon-changed` y
+`player-fired`. Su nueva captura `57-smg-pickup-matched.png` y
+close-up están fijados al SHA en el manifest de revisión y la comparación
+rechaza un PNG sin hash válido. La posición se controla por el mismo
+inicio y evento; **no** se finge identidad de fotograma ni tiempo de animación.
 El método no modifica ni inyecta código en el export Web legado.
 
 Si el pickup o el disparo no se acreditan, registra estado

@@ -23,6 +23,7 @@ PANELS = {
         ("SMG selected", "51-smg-selected-after-100ms.png"),
         ("SMG run", "52-smg-run-08.png"),
         ("SMG run + fire", "53-smg-run-fire-08.png"),
+        ("SMG real pickup, x=1240", "57-smg-pickup-matched.png"),
         ("SMG jump", "55-smg-jump-fall-07.png"),
         ("SMG landed", "56-smg-landed.png"),
         ("Industrial initial", "stage-industrial_front_v1.png"),
@@ -36,6 +37,7 @@ PANELS = {
         ("SMG selected", "50-smg-selected-immediate-closeup.png"),
         ("SMG ready", "51-smg-selected-after-100ms-closeup.png"),
         ("SMG run + fire", "53-smg-run-fire-08-closeup.png"),
+        ("SMG real pickup", "57-smg-pickup-matched-closeup.png"),
         ("SMG landed", "56-smg-landed-closeup.png"),
     ],
     "motion": [
@@ -89,6 +91,20 @@ def validate_metadata(directory):
             or jump["airborneAfter"] <= jump["airborneBefore"]
             or jump["landedAfter"] <= jump["landedBefore"]):
         raise ReviewError("Missing verified airborne jump / landing proof")
+    smg = desktop.get("matchedSmgProof")
+    if (not isinstance(smg, dict)
+            or smg.get("method") != "pistol_ready_then_authored_pickup_at_x1240"
+            or smg.get("stage") != "industrial_front_v1"
+            or smg.get("captureSpawnX") != 1170
+            or smg.get("authoredPickupX") != 1240
+            or smg.get("viewport") != {"width": 1280, "height": 720}
+            or smg.get("screenshot") != "57-smg-pickup-matched.png"
+            or any(smg.get(k) is not True for k in (
+                "ready", "weaponPickup", "weaponChanged", "firedAfterPickup"))
+            or not isinstance(smg.get("events"), list)
+            or not {"ready", "weapon-pickup", "weapon-changed",
+                    "player-fired"}.issubset(smg["events"])):
+        raise ReviewError("Matched real SMG pickup/firing proof missing")
     names = []
     for row in desktop["captures"]:
         if (not isinstance(row, dict) or not isinstance(row.get("label"), str)

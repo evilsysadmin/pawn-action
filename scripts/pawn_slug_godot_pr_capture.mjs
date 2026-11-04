@@ -38,10 +38,12 @@ await page.addInitScript(() => {
     jungle_relay_v1: 3820,
   };
   const jumpProbe = params.get('jumpProbe') === '1';
-  window.__pawnSlugVisualProbeX = jumpProbe ? 110 :
+  const pickupProbe = params.get('pickupProbe') === 'machinegun';
+  // The authored MG pickup in industrial_front_v1 is at x=1240; both repos
+  // spawn 70px beforehand. Godot still owns actual pickup, weapon and firing.
+  window.__pawnSlugVisualProbeX = pickupProbe ? 1170 : jumpProbe ? 110 :
     params.get('visualProbe') === '1' ? traversalProbes[stage] ?? null : null;
-  // Keep the jump camera probe free from combat without affecting production.
-  window.__pawnSlugVisualProbeCalmRadius = jumpProbe ? 950 : null;
+  window.__pawnSlugVisualProbeCalmRadius = pickupProbe ? 1000 : jumpProbe ? 950 : null;
   window.__pawnSlugVisualProbeWeapon = params.get('weaponProbe') || '';
   window.addEventListener('message', (event) => {
     const data = event.data;
@@ -53,7 +55,7 @@ await page.addInitScript(() => {
   });
 });
 
-function urlForStage(stageId, { visualProbe = false, weaponProbe = '', jumpProbe = false } = {}) {
+function urlForStage(stageId, { visualProbe = false, weaponProbe = '', jumpProbe = false, pickupProbe = false } = {}) {
   const url = new URL(indexUrl);
   url.searchParams.set('stage', stageId);
   if (visualProbe) url.searchParams.set('visualProbe', '1');
@@ -62,6 +64,8 @@ function urlForStage(stageId, { visualProbe = false, weaponProbe = '', jumpProbe
   else url.searchParams.delete('weaponProbe');
   if (jumpProbe) url.searchParams.set('jumpProbe', '1');
   else url.searchParams.delete('jumpProbe');
+  if (pickupProbe) url.searchParams.set('pickupProbe', 'machinegun');
+  else url.searchParams.delete('pickupProbe');
   return url.toString();
 }
 
@@ -202,6 +206,58 @@ await page.waitForTimeout(120);
 await capture('54-smg-idle');
 await captureDetailedCloseup('54-smg-idle', smgStage.canvas);
 
+// Cross-repository matched SMG frame: repeat the exact normal pickup path
+// used by the legacy Chess Studio capture, not a pre-equipped gun at level start.
+// Both captures use 1280x720, industrial_front_v1, spawn x=1170, the x=1240
+// authored pickup and stop movement on the real Godot weapon-changed event.
+const matchedStage = await loadStage(detailedStage, { pickupProbe: true });
+const matchEvents = await page.evaluate(() => window.__pawnSlugCaptureEvents);
+if (!matchEvents.includes('ready') || matchEvents.includes('weapon-changed')) {
+  throw new Error('Matched Pawn Action pickup must begin with a ready pistol');
+}
+await matchedStage.canvasLocator.click({ position: {
+  x: matchedStage.canvas.width / 2, y: matchedStage.canvas.height / 2,
+} });
+await page.keyboard.down('ArrowRight');
+try {
+  await page.waitForFunction(
+    () => window.__pawnSlugCaptureEvents.includes('weapon-changed'),
+    null, { timeout: 6500 },
+  );
+} finally {
+  await page.keyboard.up('ArrowRight');
+}
+const pickupEvents = await page.evaluate(() => window.__pawnSlugCaptureEvents);
+if (!pickupEvents.includes('weapon-pickup')) {
+  throw new Error('Matched Pawn Action SMG did not emit real weapon-pickup');
+}
+let matchedFired = false;
+for (let attempt = 0; attempt < 24 && !matchedFired; attempt += 1) {
+  const before = await page.evaluate(() => window.__pawnSlugCaptureEvents.filter(
+    type => type === 'player-fired').length);
+  await page.keyboard.down('z');
+  try { await page.waitForTimeout(240); }
+  finally { await page.keyboard.up('z'); }
+  matchedFired = await page.evaluate(previous =>
+    window.__pawnSlugCaptureEvents.filter(type => type === 'player-fired').length > previous,
+    before);
+  if (!matchedFired) await page.waitForTimeout(450);
+}
+if (!matchedFired) {
+  throw new Error('Matched Pawn Action SMG pickup never fired after 24 pulses');
+}
+await capture('57-smg-pickup-matched');
+await captureDetailedCloseup('57-smg-pickup-matched', matchedStage.canvas, { followPlayer: true });
+const matchedSmgProof = {
+  method: 'pistol_ready_then_authored_pickup_at_x1240',
+  stage: detailedStage, captureSpawnX: 1170, authoredPickupX: 1240,
+  viewport: { width: 1280, height: 720 },
+  screenshot: '57-smg-pickup-matched.png',
+  ready: true, weaponPickup: true, weaponChanged: true,
+  firedAfterPickup: true,
+  events: await page.evaluate(() => window.__pawnSlugCaptureEvents.slice(-50)),
+};
+
 // Capture jump from a fresh, enemy-calm starting lane instead of the area
 // reached after running and firing, where overhead platforms may cancel lift.
 // A real Godot bridge event fires only after >=80 px of physics ascent.
@@ -323,6 +379,7 @@ await writeFile(
     schema: 7,
     detailedStage,
     jumpProof,
+    matchedSmgProof,
     stageOverviews,
     captures,
   }, null, 2)}\n`,

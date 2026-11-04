@@ -35,6 +35,16 @@ def capture_fixture(folder):
         "schema": 7, "detailedStage": "industrial_front_v1",
         "jumpProof": {"minHeightPx": 80, "airborneBefore": 0,
                       "airborneAfter": 1, "landedBefore": 0, "landedAfter": 1},
+        "matchedSmgProof": {
+            "method": "pistol_ready_then_authored_pickup_at_x1240",
+            "stage": "industrial_front_v1",
+            "captureSpawnX": 1170, "authoredPickupX": 1240,
+            "viewport": {"width": 1280, "height": 720},
+            "screenshot": "57-smg-pickup-matched.png",
+            "ready": True, "weaponPickup": True, "weaponChanged": True,
+            "firedAfterPickup": True,
+            "events": ["ready", "weapon-pickup", "weapon-changed", "player-fired"],
+        },
         "captures": [{"label": name, "path": "/runner/visual-evidence/" + name + ".png"}
                      for name in labels],
         "stageOverviews": [
@@ -112,13 +122,15 @@ class RealReviewTests(unittest.TestCase):
 
     def test_missing_keyboard_frames_or_touch_proof_blocks_review(self):
         for fault in ("missing_run", "missing_traversal", "no_jump",
-                      "no_landing", "short_jump", "no_touch",
+                      "no_landing", "short_jump", "no_smg_pickup",
+                      "no_smg_shot", "no_touch",
                       "no_grenade", "mobile_errors"):
             with tempfile.TemporaryDirectory() as tmp:
                 folder, out = Path(tmp) / "capture", Path(tmp) / "review"
                 capture_fixture(folder)
                 if fault in ("missing_run", "missing_traversal", "no_jump",
-                             "no_landing", "short_jump"):
+                             "no_landing", "short_jump", "no_smg_pickup",
+                             "no_smg_shot"):
                     path = folder / "runtime-visual-health.json"
                     value = json.loads(path.read_text())
                     if fault == "missing_run":
@@ -132,6 +144,10 @@ class RealReviewTests(unittest.TestCase):
                         value["jumpProof"]["landedAfter"] = 0
                     elif fault == "short_jump":
                         value["jumpProof"]["minHeightPx"] = 20
+                    elif fault == "no_smg_pickup":
+                        value["matchedSmgProof"]["weaponPickup"] = False
+                    elif fault == "no_smg_shot":
+                        value["matchedSmgProof"]["events"].remove("player-fired")
                 else:
                     path = folder / "mobile-web-smoke.json"
                     value = json.loads(path.read_text())

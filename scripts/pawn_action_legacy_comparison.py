@@ -21,6 +21,26 @@ def comparison(legacy: Path, current: Path, current_sha: str) -> None:
             "candidate_not_approved", "candidate_partial_not_approved"):
         raise CandidateError("Legacy source is not a verified baseline candidate")
     smg_ok = evidence.get("smg", {}).get("status") == "captured_verified"
+    if smg_ok:
+        if evidence["smg"].get("method") != "pistol_ready_then_authored_pickup_at_x1240":
+            raise CandidateError("Legacy SMG was not captured through real pickup")
+        visual_health = json.loads((current / "runtime-visual-health.json").read_text())
+        matched = visual_health.get("matchedSmgProof", {})
+        if (matched.get("method") != evidence["smg"]["method"]
+                or matched.get("captureSpawnX") != 1170
+                or matched.get("authoredPickupX") != 1240
+                or matched.get("viewport") != {"width": 1280, "height": 720}
+                or any(matched.get(k) is not True for k in
+                       ("ready", "weaponPickup", "weaponChanged", "firedAfterPickup"))):
+            raise CandidateError("Pawn Action SMG did not prove same real pickup path")
+        review = json.loads((current / "review/review-manifest.json").read_text())
+        if review.get("source_sha") != current_sha:
+            raise CandidateError("Pawn Action matched capture is not from exact HEAD")
+        current_png = current / "57-smg-pickup-matched.png"
+        if (not current_png.is_file()
+                or review.get("evidence", {}).get("57-smg-pickup-matched.png", {}).get("sha256")
+                != hashlib.sha256(current_png.read_bytes()).hexdigest()):
+            raise CandidateError("Unpinned or damaged Pawn Action matched SMG PNG")
     if (evidence["status"] == "candidate_not_approved") != smg_ok:
         raise CandidateError("Inconsistent legacy SMG evidence/status")
     if len(evidence.get("sourceSha", "")) != 40 or len(current_sha) != 40:
@@ -32,8 +52,8 @@ def comparison(legacy: Path, current: Path, current_sha: str) -> None:
         ("Mobile landscape", "mobile-landscape-ready.png", "mobile-landscape-ready.png"),
     ]
     if smg_ok:
-        pairs.insert(3, ("SMG selected", "51-smg-selected.png",
-                         "51-smg-selected-after-100ms.png"))
+        pairs.insert(3, ("SMG real pickup (same route)", "51-smg-selected.png",
+                         "57-smg-pickup-matched.png"))
     tile_w, tile_h, top = 530, 310, 90
     sheet = Image.new("RGB", (tile_w * 2, len(pairs) * tile_h + top), "#141a23")
     draw = ImageDraw.Draw(sheet)
