@@ -93,6 +93,13 @@ ambas versiones (1280×720, Space sostenido 850 ms, sin desplazar cámara).
 Guarda fotogramas PNG originales del compositor Chromium y selecciona el
 ápice a partir de los píxeles reales de Matthias: exige un ascenso de al
 menos 80 píxeles y retorno al suelo, sin editar ni sintetizar imágenes.
+El antiguo shell Web devuelve a veces screencast 800×600 de la esquina
+superior izquierda (e incluso un primer frame 800×450) aun con viewport
+1280×720; se descartan los que recortan la región de Matthias y se
+conservan **los originales sin escalar**. El manifest registra el tamaño
+real de cada fuente y el fotograma seleccionado. El montaje usa recortes
+**de las mismas coordenadas de píxel** alrededor del actor en ambas
+versiones, evitando falsas diferencias de escala por el tamaño del frame.
 
 Chess Studio (octubre 2026) no expone el evento `player-airborne`;
 se valida el desplazamiento observado en los PNG. Pawn Action requiere

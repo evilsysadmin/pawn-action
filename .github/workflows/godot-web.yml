@@ -44,6 +44,7 @@ jobs:
           python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: 'Pillow==13.0.0'
           python3 scripts/art/test_sprite_forge.py
           python3 -m unittest discover -s tests -p 'test_pawn_action_visual_review.py' -v
+          python3 -m unittest discover -s tests -p 'test_pawn_action_matched_jump_frames.py' -v
           python3 scripts/art/sprite_forge_acceptance.py --self-test
       - name: Install pinned Godot 4.7.2 editor
         shell: bash

@@ -55,8 +55,11 @@ def comparison(legacy: Path, current: Path, current_sha: str) -> None:
                 or proof.get("stage") != "industrial_front_v1"
                 or proof.get("viewport") != {"width": 1280, "height": 720}
                 or proof.get("startX") != 110
-                or proof.get("measuredRisePx", 0) < 80):
-            raise CandidateError("Matched real 80px jump absent: " + source)
+                or proof.get("measuredRisePx", 0) < 80
+                or proof.get("originalPixelsRetained") is not True
+                or proof.get("apexSourceSize") not in (
+                    [[1280, 720]] if source == "current" else [[800, 600], [1280, 720]])):
+            raise CandidateError("Matched real 80px jump absent/invalid: " + source)
         for name in ("60-pistol-jump-idle.png", "61-pistol-jump-apex.png",
                      "62-pistol-jump-landed.png"):
             f = folder / name
@@ -86,7 +89,7 @@ def comparison(legacy: Path, current: Path, current_sha: str) -> None:
     draw.text((16, 12), "LEGACY CHESS STUDIO  |  CANDIDATE - NOT APPROVED", fill="white")
     draw.text((16, 32), "source: " + evidence["sourceSha"][:12] +
               "   vs   Pawn Action: " + current_sha[:12], fill="#c1cfdb")
-    draw.text((16, 51), "Independent frames, not frame-locked | " +
+    draw.text((16, 51), "Independent frames, not frame-locked; jump rows are 1:1 actor crops | " +
               ("SMG VERIFIED" if smg_ok else "SMG NOT PROVEN"),
               fill="#f6c36b")
     for idx, (label, before, after) in enumerate(pairs):
@@ -105,7 +108,16 @@ def comparison(legacy: Path, current: Path, current_sha: str) -> None:
             with Image.open(f) as im:
                 if im.format != "PNG":
                     raise CandidateError("Expected real Chromium PNG: " + name)
-                picture = ImageOps.contain(im.convert("RGB"), (tile_w - 16, tile_h - 43))
+                # The legacy CDP apex can be an original top-left 800x600
+                # compositor frame of the 1280x720 page. Compare identical
+                # 1:1 actor coordinates in both originals, not differently
+                # scaled screenshots with a false visual body-size mismatch.
+                raw = im.convert("RGB")
+                if name in ("61-pistol-jump-apex.png", "62-pistol-jump-landed.png"):
+                    if raw.size not in ((800, 600), (1280, 720)):
+                        raise CandidateError("Unexpected jump crop size")
+                    raw = raw.crop((45, 315, 230, 600))
+                picture = ImageOps.contain(raw, (tile_w - 16, tile_h - 43))
                 x = column * tile_w + (tile_w - picture.width) // 2
                 sheet.paste(picture, (x, row_y + 30))
             draw.text((column * tile_w + 12, row_y + 8),

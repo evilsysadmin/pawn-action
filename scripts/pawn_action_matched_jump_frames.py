@@ -11,17 +11,30 @@ import json
 from pathlib import Path
 from PIL import Image
 
-ROI = (80, 325, 155, 610)
+ROI = (80, 325, 155, 600)
+# An older Chromium/Godot shell can return a top-left 800x600 CDP frame
+# for a 1280x720 page. The face ROI is fully preserved at 1:1 pixels.
+FULL = (1280, 720)
+LEGACY_CDPS = {(800, 600), (800, 450)}
 MIN_FACE_PIXELS = 90
 MIN_RISE_PX = 80
 
 
-def face_y(filename):
+def face_y(filename, *, cdp=False, source="current"):
     if filename.is_symlink() or not filename.is_file():
         raise ValueError("Missing or unsafe Chromium screenshot")
     with Image.open(filename) as im:
-        if im.format != "PNG" or im.size != (1280, 720):
-            raise ValueError("Only real unchanged 1280x720 PNG accepted")
+        if im.format != "PNG":
+            raise ValueError("Only original compositor PNG accepted")
+        size = im.size
+        if not cdp and size != FULL:
+            raise ValueError("Idle and landed screenshots must be full viewport")
+        if cdp and size != FULL and not (source == "legacy" and size in LEGACY_CDPS):
+            raise ValueError("Unsupported compositor size, refuse rescale")
+        # A short 800x450 first screencast frame crops Matthias' legs and
+        # cannot prove return/height. Preserve it but never select as apex.
+        if size[1] < ROI[3]:
+            return None
         crop = im.convert("RGB").crop(ROI)
     pixels = crop.load()
     yy = []
@@ -59,18 +72,28 @@ def extract(folder, source):
     if grounded_y is None or landed_y is None or abs(grounded_y - landed_y) > 24:
         raise ValueError("No stable grounded start/landing")
     best = None
+    skipped_partial = 0
+    dimensions = set()
     for frame in frames:
-        center = face_y(frame)
+        with Image.open(frame) as im:
+            dimensions.add(im.size)
+            if im.size[1] < ROI[3]:
+                skipped_partial += 1
+        center = face_y(frame, cdp=True, source=source)
         if center is not None:
             rise = grounded_y - center
             if best is None or rise > best[0]:
                 best = (rise, frame, center)
+    if len(frames) - skipped_partial < 8:
+        raise ValueError("Not enough usable complete-ROI compositor frames")
     if best is None or best[0] < MIN_RISE_PX:
         raise ValueError("No authentic vertical ascent of 80px in compositor")
     apex = folder / "61-pistol-jump-apex.png"
     if apex.exists():
         raise ValueError("Cannot overwrite an existing jump candidate")
-    apex.write_bytes(best[1].read_bytes())
+    apex.write_bytes(best[1].read_bytes())  # preserve original cropped/full PNG
+    with Image.open(apex) as im:
+        apex_size = list(im.size)
     names = ("60-pistol-jump-idle.png", "61-pistol-jump-apex.png",
              "62-pistol-jump-landed.png")
     report = {
@@ -82,6 +105,10 @@ def extract(folder, source):
         "groundedMedianFaceY": grounded_y, "apexMedianFaceY": best[2],
         "landedMedianFaceY": landed_y,
         "apexSourceFrame": best[1].name, "sourceFrameCount": len(frames),
+        "apexSourceSize": apex_size,
+        "sourceFrameSizes": [list(size) for size in sorted(dimensions)],
+        "partialFramesIgnored": skipped_partial,
+        "originalPixelsRetained": True,
         "images": {name: hashlib.sha256((folder / name).read_bytes()).hexdigest()
                    for name in names},
     }
