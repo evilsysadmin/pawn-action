@@ -24,6 +24,8 @@ PANELS = {
         ("SMG run", "52-smg-run-08.png"),
         ("SMG run + fire", "53-smg-run-fire-08.png"),
         ("SMG real pickup, x=1240", "57-smg-pickup-matched.png"),
+        ("Pistol real jump", "61-pistol-jump-apex.png"),
+        ("Pistol landed", "62-pistol-jump-landed.png"),
         ("SMG jump", "55-smg-jump-fall-07.png"),
         ("SMG landed", "56-smg-landed.png"),
         ("Industrial initial", "stage-industrial_front_v1.png"),
@@ -105,6 +107,14 @@ def validate_metadata(directory):
             or not {"ready", "weapon-pickup", "weapon-changed",
                     "player-fired"}.issubset(smg["events"])):
         raise ReviewError("Matched real SMG pickup/firing proof missing")
+    matched = desktop.get("matchedPistolJumpProof")
+    if (not isinstance(matched, dict)
+            or matched.get("status") != "physical_jump_pixels_verified"
+            or matched.get("source") != "current"
+            or matched.get("measuredRisePx", 0) < 80
+            or matched.get("startX") != 110
+            or matched.get("physicsEvents") != "player-airborne_and_player-landed"):
+        raise ReviewError("Matched pistol jump missing real physical/visual proof")
     names = []
     for row in desktop["captures"]:
         if (not isinstance(row, dict) or not isinstance(row.get("label"), str)

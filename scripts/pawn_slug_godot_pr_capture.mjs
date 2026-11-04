@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+import { captureMatchedPistolJump } from './pawn_action_matched_jump.mjs';
 
 const requireFromE2e = createRequire(new URL('../e2e/package.json', import.meta.url));
 const { chromium } = requireFromE2e('playwright');
@@ -338,6 +339,18 @@ const jumpProof = {
   minHeightPx: 80, airborneBefore, airborneAfter, landedBefore, landedAfter,
 };
 
+// Legacy-compatible real pistol jump from the stationary x=110 initial lane.
+const matchedJumpStage = await loadStage(detailedStage);
+const matchedPistolJumpProof = await captureMatchedPistolJump(
+  page, outputDir, { eventKey: '__pawnSlugCaptureEvents', source: 'current' },
+);
+if (matchedJumpStage.stageId !== 'industrial_front_v1') {
+  throw new Error('Matched jump did not load industrial stage');
+}
+for (const label of ['60-pistol-jump-idle', '61-pistol-jump-apex', '62-pistol-jump-landed']) {
+  captures.push({ label, path: outputDir + '/' + label + '.png', kind: 'matched-pistol-jump' });
+}
+
 // Capture one representative traversal sector where the new industrial
 // ladder, pit mouth and stepping-route platforms share the same viewport.
 // This is a real Godot runtime frame; the probe only chooses the starting X.
@@ -380,6 +393,7 @@ await writeFile(
     detailedStage,
     jumpProof,
     matchedSmgProof,
+    matchedPistolJumpProof,
     stageOverviews,
     captures,
   }, null, 2)}\n`,

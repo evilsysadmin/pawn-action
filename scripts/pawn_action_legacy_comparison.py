@@ -45,11 +45,37 @@ def comparison(legacy: Path, current: Path, current_sha: str) -> None:
         raise CandidateError("Inconsistent legacy SMG evidence/status")
     if len(evidence.get("sourceSha", "")) != 40 or len(current_sha) != 40:
         raise CandidateError("Missing source SHA identity")
+    legacy_jump = evidence.get("matchedPistolJumpProof")
+    current_jump = json.loads((current / "matched-pistol-jump.json").read_text())
+    for source, proof, folder in (
+            ("legacy", legacy_jump, legacy), ("current", current_jump, current)):
+        if (not isinstance(proof, dict)
+                or proof.get("status") != "physical_jump_pixels_verified"
+                or proof.get("source") != source
+                or proof.get("stage") != "industrial_front_v1"
+                or proof.get("viewport") != {"width": 1280, "height": 720}
+                or proof.get("startX") != 110
+                or proof.get("measuredRisePx", 0) < 80):
+            raise CandidateError("Matched real 80px jump absent: " + source)
+        for name in ("60-pistol-jump-idle.png", "61-pistol-jump-apex.png",
+                     "62-pistol-jump-landed.png"):
+            f = folder / name
+            if (not f.is_file() or proof.get("images", {}).get(name)
+                    != hashlib.sha256(f.read_bytes()).hexdigest()):
+                raise CandidateError("Matched jump evidence hash mismatch")
+    current_review = json.loads((current / "review/review-manifest.json").read_text())
+    if current_review.get("source_sha") != current_sha:
+        raise CandidateError("Matched current jump not from exact HEAD")
+    for name, digest in current_jump["images"].items():
+        if current_review.get("evidence", {}).get(name, {}).get("sha256") != digest:
+            raise CandidateError("Matched current jump PNG missing from SHA-bound review")
     pairs = [
         ("Idle", "00-idle.png", "00-idle.png"),
         ("Run (independent timing)", "10-run.png", "10-run-07.png"),
         ("Run + fire", "20-run-fire.png", "20-run-fire-07.png"),
         ("Mobile landscape", "mobile-landscape-ready.png", "mobile-landscape-ready.png"),
+        ("Pistol jump real apex", "61-pistol-jump-apex.png", "61-pistol-jump-apex.png"),
+        ("Pistol landed", "62-pistol-jump-landed.png", "62-pistol-jump-landed.png"),
     ]
     if smg_ok:
         pairs.insert(3, ("SMG real pickup (same route)", "51-smg-selected.png",

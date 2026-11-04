@@ -35,6 +35,11 @@ def capture_fixture(folder):
         "schema": 7, "detailedStage": "industrial_front_v1",
         "jumpProof": {"minHeightPx": 80, "airborneBefore": 0,
                       "airborneAfter": 1, "landedBefore": 0, "landedAfter": 1},
+        "matchedPistolJumpProof": {
+            "status": "physical_jump_pixels_verified", "source": "current",
+            "measuredRisePx": 112, "startX": 110,
+            "physicsEvents": "player-airborne_and_player-landed",
+        },
         "matchedSmgProof": {
             "method": "pistol_ready_then_authored_pickup_at_x1240",
             "stage": "industrial_front_v1",
@@ -122,6 +127,7 @@ class RealReviewTests(unittest.TestCase):
 
     def test_missing_keyboard_frames_or_touch_proof_blocks_review(self):
         for fault in ("missing_run", "missing_traversal", "no_jump",
+                      "matched_jump_short", "matched_jump_no_physics",
                       "no_landing", "short_jump", "no_smg_pickup",
                       "no_smg_shot", "no_touch",
                       "no_grenade", "mobile_errors"):
@@ -129,6 +135,7 @@ class RealReviewTests(unittest.TestCase):
                 folder, out = Path(tmp) / "capture", Path(tmp) / "review"
                 capture_fixture(folder)
                 if fault in ("missing_run", "missing_traversal", "no_jump",
+                             "matched_jump_short", "matched_jump_no_physics",
                              "no_landing", "short_jump", "no_smg_pickup",
                              "no_smg_shot"):
                     path = folder / "runtime-visual-health.json"
@@ -144,6 +151,10 @@ class RealReviewTests(unittest.TestCase):
                         value["jumpProof"]["landedAfter"] = 0
                     elif fault == "short_jump":
                         value["jumpProof"]["minHeightPx"] = 20
+                    elif fault == "matched_jump_short":
+                        value["matchedPistolJumpProof"]["measuredRisePx"] = 20
+                    elif fault == "matched_jump_no_physics":
+                        value["matchedPistolJumpProof"]["physicsEvents"] = "unproven"
                     elif fault == "no_smg_pickup":
                         value["matchedSmgProof"]["weaponPickup"] = False
                     elif fault == "no_smg_shot":

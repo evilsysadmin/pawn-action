@@ -86,6 +86,21 @@ una aprobación retrospectiva del baseline artístico de Chess Studio.
 La aceptación visual manual debe inspeccionar la comparación en el chat y
 conservar la autoridad de revisión separada de la CI.
 
+## Salto real comparado con referencia histórica
+
+La CI también compara el salto con **pistola y salida industrial x=110** en
+ambas versiones (1280×720, Space sostenido 850 ms, sin desplazar cámara).
+Guarda fotogramas PNG originales del compositor Chromium y selecciona el
+ápice a partir de los píxeles reales de Matthias: exige un ascenso de al
+menos 80 píxeles y retorno al suelo, sin editar ni sintetizar imágenes.
+
+Chess Studio (octubre 2026) no expone el evento `player-airborne`;
+se valida el desplazamiento observado en los PNG. Pawn Action requiere
+además sus eventos físicos `player-airborne` y `player-landed`.
+Los SHA-256 de ambos juegos y el frame de origen constan en los manifiestos.
+Esto aporta evidencia comparable, no sincronía de fotograma ni aceptación
+artística humana.
+
 ## Comparación que falta
 
 Los JPG son hojas de contacto **generadas de los PNG reales**,

@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { captureMatchedPistolJump } from './pawn_action_matched_jump.mjs';
 
 const requireE2e = createRequire(new URL('../e2e/package.json', import.meta.url));
 const ORIGIN = 'https://assets.chess-studio.shadowops.dpdns.org';
@@ -160,6 +161,24 @@ async function main() {
         } finally { await desktop.keyboard.up('z'); }
       } finally { await desktop.keyboard.up('ArrowRight'); }
 
+      // Same stationary pistol jump: no airborne bridge in this old export.
+      const jump = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+      await installProbe(jump);
+      await jump.goto(index, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await jump.locator('canvas').waitFor({ state: 'visible', timeout: 45000 });
+      await jump.waitForFunction(() => window.__legacyReady === true, null, { timeout: 45000 });
+      const matchedPistolJumpProof = await captureMatchedPistolJump(
+        jump, OUT, { eventKey: '__legacyEvents', source: 'legacy' },
+      );
+      for (const name of ['60-pistol-jump-idle.png', '61-pistol-jump-apex.png',
+                          '62-pistol-jump-landed.png']) {
+        const data = await readFile(path.join(OUT, name));
+        captures[name] = { sha256: digest(data), bytes: data.length,
+          viewport: { width: 1280, height: 720 },
+          stage: 'industrial_front_v1', verified: 'real Chromium compositor ascent',
+        };
+      }
+
       const mobile = await browser.newPage({ viewport: { width: 915, height: 412 },
         isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
       await installProbe(mobile);
@@ -256,6 +275,7 @@ async function main() {
         pointerUrl: POINTER_URL, pointerSha256: digest(raw), sourceSha: pointer.sourceSha,
         release: pointer.release, bundleSha256: pointer.sha256,
         verifiedAssets, captures, smg: smgEvidence,
+        matchedPistolJumpProof,
       };
       await writeFile(path.join(OUT, 'baseline-candidate.json'),
         JSON.stringify(evidence, null, 2) + '\n');
