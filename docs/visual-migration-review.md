@@ -108,7 +108,10 @@ versiones, evitando falsas diferencias de escala por el tamaño del frame.
 Chess Studio (octubre 2026) no expone el evento `player-airborne`;
 se valida el desplazamiento observado en los PNG. Pawn Action requiere
 además sus eventos físicos `player-airborne` y `player-landed`.
-Los SHA-256 de ambos juegos y el frame de origen constan en los manifiestos.
+Los SHA-256 de ambos juegos, la posición inicial, el ápice, el aterrizaje
+y el frame de origen constan en los manifiestos. Incluso si el SMG legado
+falla intermitentemente, el estado parcial debe conservar los saltos
+físicamente acreditados y NO debe marcar el SMG como aprobado.
 Esto aporta evidencia comparable, no sincronía de fotograma ni aceptación
 artística humana.
 

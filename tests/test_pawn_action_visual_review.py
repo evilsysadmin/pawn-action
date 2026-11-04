@@ -86,6 +86,7 @@ class RealReviewTests(unittest.TestCase):
                 self.assertTrue(file.is_file())
                 with Image.open(file) as image:
                     self.assertGreaterEqual(image.width, 800)
+            self.assertIn("60-pistol-jump-idle.png", result["evidence"])
             sample = "00-idle.png"
             self.assertEqual(
                 result["evidence"][sample]["sha256"],

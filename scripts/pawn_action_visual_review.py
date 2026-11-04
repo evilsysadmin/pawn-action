@@ -24,6 +24,7 @@ PANELS = {
         ("SMG run", "52-smg-run-08.png"),
         ("SMG run + fire", "53-smg-run-fire-08.png"),
         ("SMG real pickup, x=1240", "57-smg-pickup-matched.png"),
+        ("Pistol grounded takeoff", "60-pistol-jump-idle.png"),
         ("Pistol real jump", "61-pistol-jump-apex.png"),
         ("Pistol landed", "62-pistol-jump-landed.png"),
         ("SMG jump", "55-smg-jump-fall-07.png"),
