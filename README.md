@@ -70,10 +70,12 @@ network errors and malformed JSON stop publication.
 # Uses dedicated Pawn Action credentials; does not publish or modify R2
 python3 -S scripts/pawn_slug_godot_bundle.py inspect-current
 
-# Use its currentPointerSha256 (exact remote JSON bytes) or "absent".
+# Copy the reported currentPointerSha256 (64 lowercase hex) or "absent".
+# A missing or unreviewed value must fail before any Cloudflare write.
+export EXPECTED_CURRENT_POINTER_SHA256='absent'  # example: *only* for verified first release
 # Only after human visual approval and permission/GC checks:
 python3 -S scripts/pawn_slug_godot_bundle.py publish --confirm-publish \
-  --expected-current-pointer-sha256 <64hex-or-absent>
+  --expected-current-pointer-sha256 "$EXPECTED_CURRENT_POINTER_SHA256"
 ```
 
 A live publication refuses a missing or stale expected fingerprint before
