@@ -15,6 +15,70 @@ class CandidateError(ValueError):
     pass
 
 
+# Full-size 1280×720 original Chromium frames at four independent time samples
+# for each real keyboard phase. These are NOT phase-locked between engines.
+MOTION_PAIRS = [
+    ("RUN frame 00", "10-run-00.png"),
+    ("RUN frame 03", "10-run-03.png"),
+    ("RUN frame 07", "10-run-07.png"),
+    ("RUN frame 11", "10-run-11.png"),
+    ("FIRE held 00", "20-run-fire-00.png"),
+    ("FIRE held 03", "20-run-fire-03.png"),
+    ("FIRE held 07", "20-run-fire-07.png"),
+    ("FIRE held 11", "20-run-fire-11.png"),
+]
+
+
+def build_motion_sheet(legacy, current, evidence, review, current_sha, target):
+    """Only authenticated original frames; same actor corridor crop on both sides.
+
+    Adds visual review evidence, not automatic judgements about stride quality.
+    """
+    if review.get("source_sha") != current_sha or target.exists():
+        raise CandidateError("Motion review HEAD identity or destination invalid")
+    tiles = []
+    for label, name in MOTION_PAIRS:
+        imgs = []
+        for source, folder, manifest in (
+            ("Chess Studio", legacy, evidence.get("captures", {})),
+            ("Pawn Action", current, review.get("evidence", {})),
+        ):
+            file = folder / name
+            if file.is_symlink() or not file.is_file() or file.stat().st_size > 8 * 1024**2:
+                raise CandidateError("Missing/unsafe original motion PNG: " + name)
+            raw = file.read_bytes()
+            entry = manifest.get(name, {})
+            if not isinstance(entry, dict) or hashlib.sha256(raw).hexdigest() != entry.get("sha256"):
+                raise CandidateError("Motion frame SHA mismatch: " + name)
+            try:
+                with Image.open(file) as im:
+                    if im.format != "PNG" or im.size != (1280, 720):
+                        raise CandidateError("Motion frame viewport mismatch: " + name)
+                    # Identical source coordinates, not cropped by a guessed
+                    # player position. Includes whole foreground travel lane.
+                    cropped = im.convert("RGB").crop((40, 360, 830, 660))
+            except (OSError, ValueError, Image.DecompressionBombError) as exc:
+                raise CandidateError("Invalid original motion PNG: " + name) from exc
+            imgs.append((source, cropped))
+        tiles.append((label, imgs))
+    tile_w, tile_h, top = 590, 254, 100
+    sheet = Image.new("RGB", (tile_w * 2, top + len(tiles) * tile_h), "#141a23")
+    ink = ImageDraw.Draw(sheet)
+    ink.text((15, 12), "RUN / FIRE MOTION REVIEW - CANDIDATE ONLY", fill="white")
+    ink.text((15, 33), "Chess Studio vs Pawn Action " + current_sha[:12], fill="#c1cfdb")
+    ink.text((15, 54), "Independent input/capture timing - not phase or frame locked",
+             fill="#e8b96d")
+    for index, (label, columns) in enumerate(tiles):
+        y0 = top + index * tile_h
+        for col, (title, img) in enumerate(columns):
+            picture = ImageOps.contain(img, (tile_w - 12, tile_h - 35))
+            x0 = tile_w * col + (tile_w - picture.width) // 2
+            sheet.paste(picture, (x0, y0 + 27))
+            ink.text((tile_w * col + 12, y0 + 7), title + "  |  " + label, fill="white")
+    sheet.save(target, "JPEG", quality=91)
+
+
+
 def comparison(legacy: Path, current: Path, current_sha: str) -> None:
     evidence = json.loads((legacy / "baseline-candidate.json").read_text(encoding="utf-8"))
     if evidence.get("status") not in (
@@ -125,7 +189,11 @@ def comparison(legacy: Path, current: Path, current_sha: str) -> None:
                       "  |  " + label, fill="white")
     target = legacy / "side-by-side-candidate.jpg"
     sheet.save(target, "JPEG", quality=90)
-    print("Candidate comparison created (NOT approved):", target)
+    current_review = json.loads((current / "review/review-manifest.json").read_text())
+    motion_target = legacy / "side-by-side-motion-candidate.jpg"
+    build_motion_sheet(legacy, current, evidence, current_review, current_sha, motion_target)
+    print("Candidate comparison created (NOT approved):", target,
+          "| real motion sequence:", motion_target)
 
 
 def main() -> None:

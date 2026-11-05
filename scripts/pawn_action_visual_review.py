@@ -58,6 +58,16 @@ PANELS = {
         ("SMG jump 11", "55-smg-jump-fall-11-closeup.png"),
         ("SMG jump 15", "55-smg-jump-fall-15-closeup.png"),
     ],
+    "motion-compare": [
+        ("Run 00", "10-run-00.png"),
+        ("Run 03", "10-run-03.png"),
+        ("Run 07", "10-run-07.png"),
+        ("Run 11", "10-run-11.png"),
+        ("Fire held 00", "20-run-fire-00.png"),
+        ("Fire held 03", "20-run-fire-03.png"),
+        ("Fire held 07", "20-run-fire-07.png"),
+        ("Fire held 11", "20-run-fire-11.png"),
+    ],
     "mobile": [
         ("Touch ready", "mobile-landscape-ready.png"),
         ("Touch fire", "mobile-landscape-fire.png"),
@@ -212,7 +222,8 @@ def build(directory, output, sha, run_id):
     output.mkdir(parents=True)
     for group, (cols, tile) in {
         "desktop": (3, (410, 231)), "closeups": (4, (280, 225)),
-        "motion": (4, (280, 225)), "mobile": (2, (460, 400)),
+        "motion": (4, (280, 225)), "motion-compare": (4, (410, 231)),
+        "mobile": (2, (460, 400)),
     }.items():
         sheet(group, PANELS[group], images, sha, cols, tile).save(
             output / ("review-" + group + ".jpg"), quality=88)
@@ -229,7 +240,7 @@ def build(directory, output, sha, run_id):
     (output / "README.md").write_text(
         "# Pawn Action visual review\n\n"
         + "Source SHA: " + sha + "\nActions run: " + run_id + "\n\n"
-        + "Four contact sheets from real Chromium/Godot captures. "
+        + "Five contact sheets from real Chromium/Godot captures. "
         + "Original screenshot SHA256 values are in review-manifest.json. "
         + "Visual review is PENDING. No comparable approved Chess Studio "
         + "baseline is bundled. Green CI does not approve visual parity. "

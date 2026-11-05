@@ -95,6 +95,19 @@ async function capture(page, url, filename, outputs) {
     viewport: page.viewportSize(), stage: 'industrial_front_v1',
   };
 }
+// Consecutive real Chromium frames for coarse cycle review. No artificial
+// animation state or synthetic intermediate frames are injected.
+async function motionFrame(page, label, outputs) {
+  const name = label + '.png';
+  const original = await page.screenshot({ fullPage: false });
+  await writeFile(path.join(OUT, name), original);
+  outputs[name] = {
+    sha256: digest(original), bytes: original.length,
+    viewport: page.viewportSize(), stage: 'industrial_front_v1',
+    verified: 'real continuous keyboard gameplay frame',
+  };
+}
+
 async function installProbe(page) {
   await page.addInitScript(() => {
     window.__legacyReady = false;
@@ -147,6 +160,12 @@ async function main() {
         await writeFile(path.join(OUT, '10-run.png'), image);
         captures['10-run.png'] = { sha256: digest(image), bytes: image.length,
           viewport: { width: 1280, height: 720 }, stage: 'industrial_front_v1' };
+        // Four independent samples during real rightward locomotion, enough
+        // to review temporal leg/ground continuity rather than one lucky pose.
+        for (const index of ['00', '03', '07', '11']) {
+          await motionFrame(desktop, '10-run-' + index, captures);
+          await desktop.waitForTimeout(105);
+        }
         const firesBefore = await desktop.evaluate(() =>
           window.__legacyEvents.filter(x => x === 'player-fired').length);
         await desktop.keyboard.down('z');
@@ -158,6 +177,10 @@ async function main() {
           await writeFile(path.join(OUT, '20-run-fire.png'), fired);
           captures['20-run-fire.png'] = { sha256: digest(fired), bytes: fired.length,
             viewport: { width: 1280, height: 720 }, stage: 'industrial_front_v1' };
+          for (const index of ['00', '03', '07', '11']) {
+            await motionFrame(desktop, '20-run-fire-' + index, captures);
+            await desktop.waitForTimeout(105);
+          }
         } finally { await desktop.keyboard.up('z'); }
       } finally { await desktop.keyboard.up('ArrowRight'); }
 

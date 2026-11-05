@@ -115,6 +115,18 @@ físicamente acreditados y NO debe marcar el SMG como aprobado.
 Esto aporta evidencia comparable, no sincronía de fotograma ni aceptación
 artística humana.
 
+## Carrera y disparo · secuencia temporal original
+
+El artifact histórico añade `side-by-side-motion-candidate.jpg` con
+cuatro muestras de la carrera y otras cuatro de carrera con FIRE mantenido,
+todas desde capturas Chromium **reales**, sin interpolación, y junto a
+los mismos índices de las capturas Web de Pawn Action. El montaje exige
+viewport 1280×720, valida el SHA-256 de cada PNG original en el manifest
+histórico y en el review vinculado al HEAD actual, y usa coordenadas de
+recorte idénticas para no disfrazar cambios de escala corporal. No
+concluye por sí mismo si las piernas se mueven bien: requiere inspección
+humana. El tiempo de las dos sesiones no está sincronizado por frame.
+
 ## Comparación que falta
 
 Los JPG son hojas de contacto **generadas de los PNG reales**,
