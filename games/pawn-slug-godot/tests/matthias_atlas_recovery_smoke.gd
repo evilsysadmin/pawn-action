@@ -59,7 +59,8 @@ func _run() -> void:
     # exhausted-retry callback as any failed background request. The next
     # background bank must progress, while selected SMG receives foreground
     # fallback ownership instead of remaining invisible forever.
-    art._background_full_queue = ["shotgun"]
+    art._background_full_queue.clear()
+    art._background_full_queue.append("shotgun")
     art._settle_bootstrap_request("machinegun", "full-v9", false)
     await process_frame
     await process_frame
