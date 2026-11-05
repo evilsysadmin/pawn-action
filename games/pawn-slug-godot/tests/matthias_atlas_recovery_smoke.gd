@@ -1,6 +1,7 @@
 extends SceneTree
 
 const ArtProbe := preload("res://tests/matthias_atlas_recovery_probe.gd")
+const MatthiasArt := preload("res://scripts/matthias_art.gd")
 var _failures: Array[String] = []
 
 func _initialize() -> void:
@@ -12,12 +13,12 @@ func _expect(value: bool, note: String) -> void:
     _failures.append(note)
     push_error("Atlas recovery smoke: " + note)
 
-func _new_probe() -> Node2D:
+func _new_probe():
     var art := ArtProbe.new()
     root.add_child(art)
     return art
 
-func _begin_early_pickup(art: Node2D) -> void:
+func _begin_early_pickup(art) -> void:
     # Real game is already running with visible pistol, while its normal
     # background full-bank warmup is downloading the machinegun.
     art._weapon = "pistol"
@@ -35,11 +36,11 @@ func _begin_early_pickup(art: Node2D) -> void:
         "one in-flight background SMG bank prevents duplicate foreground download")
 
 func _run() -> void:
-    var art := _new_probe()
+    var art = _new_probe()
     await process_frame
     _expect(
-        art.ATLAS_DOWNLOAD_TIMEOUT_SECONDS >= 40.0
-        and art.ATLAS_DOWNLOAD_TIMEOUT_SECONDS <= 120.0,
+        MatthiasArt.ATLAS_DOWNLOAD_TIMEOUT_SECONDS >= 40.0
+        and MatthiasArt.ATLAS_DOWNLOAD_TIMEOUT_SECONDS <= 120.0,
         "finite, conservative atlas download timeout replaces infinite default",
     )
 
@@ -73,8 +74,8 @@ func _run() -> void:
     frames.add_animation("idle")
     frames.set_animation_loop("idle", true)
     frames.add_frame("idle", ImageTexture.create_from_image(image))
-    art._full_frames_by_weapon["machinegun"] = frames
-    art._v9_ready_by_weapon["machinegun"] = true
+    MatthiasArt._full_frames_by_weapon["machinegun"] = frames
+    MatthiasArt._v9_ready_by_weapon["machinegun"] = true
     art._install_or_request_weapon()
     _expect(art.body_ready() and art._body.visible,
         "decoded selected SMG bank restores visible, playable Matthias")
@@ -82,8 +83,8 @@ func _run() -> void:
         "recovery never reinstalls the old pistol silhouette")
 
     # Do not leak the fake static cache into any other test and do not touch CDN.
-    art._full_frames_by_weapon.erase("machinegun")
-    art._v9_ready_by_weapon.erase("machinegun")
+    MatthiasArt._full_frames_by_weapon.erase("machinegun")
+    MatthiasArt._v9_ready_by_weapon.erase("machinegun")
     art.queue_free()
     await process_frame
     if not _failures.is_empty():
