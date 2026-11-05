@@ -93,6 +93,11 @@ func _run() -> void:
     _expect(art._rendered_weapon == "machinegun",
         "recovery never reinstalls the old pistol silhouette")
 
+    # The previous scenario installed synthetic SMG SpriteFrames in a
+    # static cache. Clear them before testing the uncached pickup race.
+    MatthiasArt._full_frames_by_weapon.erase("machinegun")
+    MatthiasArt._v9_ready_by_weapon.erase("machinegun")
+
     # Foreground pistol overlay is still downloading when a new unready
     # machinegun is picked up. The stale request must be cancelled at once,
     # not after a long network timeout; the selected bank owns the slot.
@@ -143,9 +148,7 @@ func _run() -> void:
         pending.queue_free()
     await process_frame
 
-    # Do not leak the fake static cache into any other test and do not touch CDN.
-    MatthiasArt._full_frames_by_weapon.erase("machinegun")
-    MatthiasArt._v9_ready_by_weapon.erase("machinegun")
+    # Do not leak synthetic assets or request objects into another test.
     art.queue_free()
     await process_frame
     _completed = true
