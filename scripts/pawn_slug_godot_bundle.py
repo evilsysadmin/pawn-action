@@ -466,7 +466,10 @@ def self_test() -> None:
         # a mismatched current.json must fail BEFORE ANY upload.
         credentials = ("dedicated-test-token", "dedicated-test-account")
         desired_build = root
-        with patch.object(core, "load_config", return_value=target), patch(
+        # These mocked remote manifests were built under assets.example.test,
+        # so the strict pointer URL validator must see that exact test origin.
+        mock_remote_config = {"bucket": target["bucket"], "customDomain": "assets.example.test"}
+        with patch.object(core, "load_config", return_value=mock_remote_config), patch(
             __name__ + "._require_publish_authority", return_value=credentials
         ), patch.dict(os.environ, {"GITHUB_SHA": "b" * 40}, clear=True):
             with patch.object(core, "get_object", return_value=original), patch.object(
