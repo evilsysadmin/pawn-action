@@ -177,26 +177,74 @@ def _require_publish_authority(config: dict[str, Any]) -> tuple[str, str]:
 
 
 def _fetch_existing_pointer(token: str, account_id: str, bucket: str,
-                            pointer_key: str, base_url: str, prefix: str) -> dict[str, Any] | None:
+                            pointer_key: str, base_url: str, prefix: str
+                            ) -> tuple[dict[str, Any] | None, str | None]:
+    """Return validated pointer AND SHA-256 of exact original R2 JSON bytes.
+
+    Release digest alone cannot detect an intervening repoint of sourceSha.
+    This byte fingerprint binds any later mutation to the operator-reviewed
+    current.json, and is checked a second time immediately before PUT.
+    """
     try:
         raw = core.get_object(token, account_id, bucket, pointer_key)
     except core.PublishError as exc:
         # Only an explicit missing pointer permits a first publication.
         # Never overwrite a known pointer on timeouts, 403/500, or stale API errors.
         if str(exc) == f"Cloudflare GET HTTP 404 para {pointer_key}":
-            return None
+            return None, None
         raise BundleError(f"Cannot verify existing R2 pointer {pointer_key}: {exc}") from exc
     try:
         candidate = json.loads(raw.decode("utf-8"))
     except (ValueError, UnicodeError) as exc:
         raise BundleError(f"Existing R2 pointer {pointer_key} is invalid JSON") from exc
     validate_pointer(candidate, base_url=base_url, prefix=prefix)
-    return candidate
+    return candidate, hashlib.sha256(raw).hexdigest()
+
+
+def _require_current_pointer_match(expected_sha256: str, actual_sha256: str | None) -> None:
+    """Explicit first-release or byte-for-byte current pointer precondition."""
+    if expected_sha256 == "absent" and actual_sha256 is None:
+        return
+    if re.fullmatch(r"[0-9a-f]{64}", expected_sha256 or "") and expected_sha256 == actual_sha256:
+        return
+    raise BundleError(
+        "R2 current pointer differs from explicitly expected fingerprint; "
+        "abort publication and re-inspect the destination"
+    )
+
+
+def inspect_current(config_path: pathlib.Path) -> dict[str, Any]:
+    """Read-only operator preview; never writes a release or moves a pointer."""
+    config = core.load_config(config_path)
+    token, account_id = _require_publish_authority(config)
+    prefix = DEFAULT_PREFIX
+    pointer, fingerprint = _fetch_existing_pointer(
+        token, account_id, config["bucket"], f"{prefix}/{POINTER_NAME}",
+        f"https://{config['customDomain']}", prefix,
+    )
+    result = {
+        "prefix": prefix,
+        "exists": pointer is not None,
+        "currentPointerSha256": fingerprint if fingerprint is not None else "absent",
+        "release": pointer["release"] if pointer is not None else None,
+        "sourceSha": pointer["sourceSha"] if pointer is not None else None,
+    }
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return result
 
 
 def publish(build_dir: pathlib.Path, config_path: pathlib.Path, prefix: str,
-            dry_run: bool, confirmed: bool = False) -> dict[str, Any]:
+            dry_run: bool, confirmed: bool = False,
+            expected_current_pointer_sha256: str = "") -> dict[str, Any]:
     _authorize_publish(prefix, dry_run=dry_run, confirmed=confirmed)
+    if not dry_run and not (
+        expected_current_pointer_sha256 == "absent"
+        or re.fullmatch(r"[0-9a-f]{64}", expected_current_pointer_sha256 or "")
+    ):
+        raise BundleError(
+            "Live publish requires --expected-current-pointer-sha256 "
+            "<64hex|absent> from authenticated inspect-current"
+        )
     config = core.load_config(config_path)
     # Refuse accidental live writes before reading/building an export or
     # making any Cloudflare request. Credential-less dry runs stay usable.
@@ -210,7 +258,21 @@ def publish(build_dir: pathlib.Path, config_path: pathlib.Path, prefix: str,
     token, account_id = credentials
     bucket = config["bucket"]
     pointer_key = f"{prefix.strip('/')}/{POINTER_NAME}"
-    existing = _fetch_existing_pointer(token, account_id, bucket, pointer_key, base_url, prefix)
+    existing, before_fingerprint = _fetch_existing_pointer(
+        token, account_id, bucket, pointer_key, base_url, prefix,
+    )
+    _require_current_pointer_match(expected_current_pointer_sha256, before_fingerprint)
+
+    def check_unchanged_remote_pointer() -> None:
+        # A remote writer or GC may have changed current.json while immutable
+        # objects were uploading. Never overwrite a new pointer silently.
+        _, fresh_fingerprint = _fetch_existing_pointer(
+            token, account_id, bucket, pointer_key, base_url, prefix,
+        )
+        if fresh_fingerprint != before_fingerprint:
+            raise BundleError(
+                "R2 current pointer changed during release; refusing final PUT"
+            )
 
     if existing is not None:
         action = _pointer_action(existing, pointer)
@@ -219,6 +281,7 @@ def publish(build_dir: pathlib.Path, config_path: pathlib.Path, prefix: str,
             return existing
         if action == "repoint":
             rendered = (json.dumps(pointer, indent=2, sort_keys=True) + "\n").encode("utf-8")
+            check_unchanged_remote_pointer()
             core.upload_object(token, account_id, bucket, pointer_key, rendered, "application/json; charset=utf-8")
             print(f"REPOINTED Pawn Action Godot {pointer['release']} -> sourceSha={pointer['sourceSha']}")
             return pointer
@@ -241,6 +304,7 @@ def publish(build_dir: pathlib.Path, config_path: pathlib.Path, prefix: str,
         core.upload_object(token, account_id, bucket, entry["key"], source.read_bytes(), entry["contentType"])
         print(f"UPLOADED {relative} -> {entry['url']}")
 
+    check_unchanged_remote_pointer()
     core.upload_object(token, account_id, bucket, pointer_key, rendered, "application/json; charset=utf-8")
     print(f"PUBLISHED Pawn Action Godot {pointer['release']} -> {pointer['index']}")
     return pointer
@@ -351,7 +415,7 @@ def self_test() -> None:
             f"Cloudflare GET HTTP 404 para {pointer_key}"
         )):
             assert _fetch_existing_pointer("test", "test", "test", pointer_key,
-                                           "https://assets.example.test", DEFAULT_PREFIX) is None
+                                           "https://assets.example.test", DEFAULT_PREFIX) == (None, None)
         for failure in (f"Cloudflare GET HTTP 403 para {pointer_key}",
                         f"Cloudflare GET HTTP 500 para {pointer_key}"):
             with patch.object(core, "get_object", side_effect=core.PublishError(failure)):
@@ -371,6 +435,75 @@ def self_test() -> None:
             else:
                 raise AssertionError("Corrupt existing R2 pointer was accepted")
         assert _pointer_action(first, same_bundle_new_source) == "repoint"
+        # Exact remote bytes, not merely the release content SHA, are the
+        # publication precondition; same immutable bundle may be repointed
+        # to a different (reviewed) source commit.
+        original = (json.dumps(first, sort_keys=True) + "\n").encode("utf-8")
+        original_fingerprint = hashlib.sha256(original).hexdigest()
+        with patch.object(core, "get_object", return_value=original):
+            remote, fingerprint = _fetch_existing_pointer(
+                "test", "test", "test", pointer_key,
+                "https://assets.example.test", DEFAULT_PREFIX,
+            )
+            assert remote == first and fingerprint == original_fingerprint
+        _require_current_pointer_match(original_fingerprint, fingerprint)
+        _require_current_pointer_match("absent", None)
+        for expected, observed in [
+            ("absent", fingerprint),
+            (original_fingerprint, None),
+            ("f" * 64, fingerprint),
+            ("", fingerprint),
+            ("A" * 64, fingerprint),
+        ]:
+            try:
+                _require_current_pointer_match(expected, observed)
+            except BundleError:
+                pass
+            else:
+                raise AssertionError("Unsafe R2 expected-pointer precondition passed")
+
+        # Exercise actual live publishing code with stubbed remote access:
+        # a mismatched current.json must fail BEFORE ANY upload.
+        credentials = ("dedicated-test-token", "dedicated-test-account")
+        desired_build = root
+        with patch.object(core, "load_config", return_value=target), patch(
+            __name__ + "._require_publish_authority", return_value=credentials
+        ), patch.dict(os.environ, {"GITHUB_SHA": "b" * 40}, clear=True):
+            with patch.object(core, "get_object", return_value=original), patch.object(
+                core, "upload_object", side_effect=AssertionError("unexpected PUT")
+            ):
+                try:
+                    publish(desired_build, DEFAULT_CONFIG, DEFAULT_PREFIX, False, True, "absent")
+                except BundleError:
+                    pass
+                else:
+                    raise AssertionError("Publishing over unreviewed current pointer was allowed")
+            # A remote source repoint between initial inspection and final
+            # PUT must fail even when immutable release bytes are unchanged.
+            changed_remote = (json.dumps(same_bundle_new_source, sort_keys=True) + "\n").encode("utf-8")
+            with patch.object(core, "get_object", side_effect=[original, changed_remote]), patch.object(
+                core, "upload_object", side_effect=AssertionError("unsafe pointer repoint PUT")
+            ):
+                try:
+                    publish(desired_build, DEFAULT_CONFIG, DEFAULT_PREFIX, False, True, original_fingerprint)
+                except BundleError as exc:
+                    assert "changed during release" in str(exc)
+                else:
+                    raise AssertionError("Concurrent repoint was not detected")
+            # No matching current pointer in the first-release scenario:
+            # a new pointer appearing before the final PUT must fail closed.
+            missing = core.PublishError(f"Cloudflare GET HTTP 404 para {pointer_key}")
+            with patch.object(core, "get_object", side_effect=[missing, original]), patch(
+                "r2_storage_governance.admission_check_batch"
+            ), patch.object(core, "upload_object", return_value={}) as uploads:
+                try:
+                    publish(desired_build, DEFAULT_CONFIG, DEFAULT_PREFIX, False, True, "absent")
+                except BundleError as exc:
+                    assert "changed during release" in str(exc)
+                else:
+                    raise AssertionError("Concurrent first-release pointer was overwritten")
+                assert not any(call.args[3] == pointer_key for call in uploads.call_args_list)
+
         (root / "index.pck").write_bytes(b"changed" * 64)
         changed = build_pointer(root, "https://assets.example.test", DEFAULT_PREFIX, "b" * 40)
         assert changed["release"] != first["release"]
@@ -400,6 +533,12 @@ def parser() -> argparse.ArgumentParser:
     publish_cmd.add_argument("--dry-run", action="store_true")
     publish_cmd.add_argument("--confirm-publish", action="store_true",
                              help="Explicitly authorize writing pawn-action/current.json (never the legacy pointer)")
+    publish_cmd.add_argument("--expected-current-pointer-sha256", default="",
+                             metavar="64HEX|absent",
+                             help="Exact authenticated current.json fingerprint from inspect-current; mandatory for live writes")
+    inspect = sub.add_parser("inspect-current",
+                             help="Read-only inspect of the dedicated Pawn Action pointer and its exact SHA256")
+    inspect.add_argument("--config", type=pathlib.Path, default=DEFAULT_CONFIG)
     verify = sub.add_parser("verify-pointer")
     verify.add_argument("path", type=pathlib.Path)
     verify.add_argument("--config", type=pathlib.Path, default=DEFAULT_CONFIG)
@@ -418,7 +557,10 @@ def main() -> int:
             pointer = build_pointer(args.build_dir, f"https://{config['customDomain']}", args.prefix)
             print(json.dumps(pointer, indent=2, sort_keys=True))
         elif args.command == "publish":
-            publish(args.build_dir, args.config, args.prefix, args.dry_run, args.confirm_publish)
+            publish(args.build_dir, args.config, args.prefix, args.dry_run,
+                    args.confirm_publish, args.expected_current_pointer_sha256)
+        elif args.command == "inspect-current":
+            inspect_current(args.config)
         elif args.command == "verify-pointer":
             print(verify_pointer(args.path, args.config, args.prefix, args.expected_source_sha))
         return 0

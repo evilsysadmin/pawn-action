@@ -62,10 +62,33 @@ variable matches do not prove either one. No CI workflow publishes to R2.
 
 An existing `pawn-action/current.json` must validate before being updated.
 Only a verified remote 404 is accepted as an absent pointer: 403, 500,
-network errors and malformed JSON stop publication. This does not implement
-distributed compare-and-swap; ensure that only **one** designated publisher
-can write the Pawn Action pointer, and never enable both repositories to
-publish the legacy pointer.
+network errors and malformed JSON stop publication.
+
+**New operator precondition (read-only first):**
+
+```sh
+# Uses dedicated Pawn Action credentials; does not publish or modify R2
+python3 -S scripts/pawn_slug_godot_bundle.py inspect-current
+
+# Use its currentPointerSha256 (exact remote JSON bytes) or "absent".
+# Only after human visual approval and permission/GC checks:
+python3 -S scripts/pawn_slug_godot_bundle.py publish --confirm-publish \
+  --expected-current-pointer-sha256 <64hex-or-absent>
+```
+
+A live publication refuses a missing or stale expected fingerprint before
+any write, and reads `current.json` **again immediately before updating**
+it. If another publisher moved/repointed the pointer in between, publication
+stops without overwriting the newer pointer (immutable release objects
+already uploaded may remain for subsequent cleanup). A content-identical
+release with a different `sourceSha` is still a distinct pointer update.
+
+**This is not atomic distributed compare-and-swap.** The interval between
+the final GET and PUT still requires **one designated pointer writer**.
+The separate Cloudflare token scope, shared-bucket GC exclusion for
+`pawn-action/`, retention and rollback must be verified externally.
+No CI workflow publishes to R2; these protections are not permission to
+cut over, and never permit writing the Chess Studio legacy pointer.
 
 ## Visual review before migration merge
 
