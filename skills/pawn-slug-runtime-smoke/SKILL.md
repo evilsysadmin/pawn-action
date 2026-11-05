@@ -104,6 +104,17 @@ corregido por sí mismo.
 
 ## Readiness
 
+Las descargas no críticas ya no retienen el único slot foreground durante un
+cambio de arma: si el banco nuevo no está listo, el cambio cancela una petición
+foreground de otro arma, desconecta su callback y concede el slot al
+seleccionado. Si una petición secundaria termina por error o por éxito durante
+un cambio de arma, su callback vuelve a comprobar `body_ready()` y reanuda
+el banco que realmente está equipado. No se muestra el sprite del arma anterior
+ni se concede `body_ready()` por una pulsación o evento artificial.
+
+La CI reproduce ambas carreras sin red, con request antiguo activo, fallo de
+overlay opcional y un solo nuevo request del banco completo correcto.
+
 Los assets canónicos pueden introducir varianza de cold boot. Usar el timeout versionado del propio test/workflow y calibrarlo con evidencia de runner; actualmente el bridge contempla una ventana de arranque fría más amplia que un boot local caliente.
 
 No esconder un deadlock aumentando timeouts repetidamente. Distinguir:

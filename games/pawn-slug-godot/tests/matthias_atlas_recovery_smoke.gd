@@ -93,6 +93,56 @@ func _run() -> void:
     _expect(art._rendered_weapon == "machinegun",
         "recovery never reinstalls the old pistol silhouette")
 
+    # Foreground pistol overlay is still downloading when a new unready
+    # machinegun is picked up. The stale request must be cancelled at once,
+    # not after a long network timeout; the selected bank owns the slot.
+    var stale = _new_probe()
+    await process_frame
+    stale._weapon = "pistol"
+    stale._rendered_weapon = "pistol"
+    stale._body_ready = true
+    stale._body.visible = true
+    var old_request := HTTPRequest.new()
+    stale.add_child(old_request)
+    stale._atlas_request = old_request
+    stale._atlas_request_weapon = "pistol"
+    stale._atlas_request_layout = "run12-v22"
+    stale.set_weapon("machinegun")
+    _expect(old_request.is_queued_for_deletion(), "stale pistol request cancelled immediately")
+    _expect(stale.foreground_requests.count("machinegun:full-v9") == 1,
+        "SMG full bank takes over foreground slot immediately")
+    _expect(stale._atlas_request_weapon == "machinegun",
+        "request ownership follows the selected weapon, not the old pistol")
+    _expect(not stale.body_ready() and not stale._body.visible,
+        "new weapon remains genuinely hidden until its authored atlas arrives")
+    stale.queue_free()
+
+    # Defensive callback path: if an optional request completes after a
+    # selection race while its request is already owned, it must resume the
+    # uncached selected bank instead of returning with _body_ready=false.
+    for optional_layout in ["run12-v22", "locomotion-v10"]:
+        var pending = _new_probe()
+        await process_frame
+        pending._weapon = "machinegun"
+        pending._rendered_weapon = ""
+        pending._body_ready = false
+        pending._body.visible = false
+        var optional := HTTPRequest.new()
+        pending.add_child(optional)
+        pending._atlas_request = optional
+        pending._atlas_request_weapon = "pistol"
+        pending._atlas_request_layout = optional_layout
+        pending._on_atlas_loaded(
+            HTTPRequest.RESULT_CANT_CONNECT, 0, PackedStringArray(), PackedByteArray()
+        )
+        await process_frame
+        _expect(pending.foreground_requests.count("machinegun:full-v9") == 1,
+            optional_layout + " completion resumes the waiting selected weapon")
+        _expect(pending._atlas_request_weapon == "machinegun",
+            "optional completion does not reinstall stale pistol bank")
+        pending.queue_free()
+    await process_frame
+
     # Do not leak the fake static cache into any other test and do not touch CDN.
     MatthiasArt._full_frames_by_weapon.erase("machinegun")
     MatthiasArt._v9_ready_by_weapon.erase("machinegun")
@@ -103,5 +153,5 @@ func _run() -> void:
         print("FAIL Matthias atlas recovery: %d" % _failures.size())
         quit(1)
         return
-    print("OK Matthias early SMG pickup: hidden while pending, bounded timeout, foreground recovery, visible correct bank")
+    print("OK Matthias SMG: early pickup, bounded timeout, foreground recovery, cancelled stale requests, optional callback resume")
     quit(0)

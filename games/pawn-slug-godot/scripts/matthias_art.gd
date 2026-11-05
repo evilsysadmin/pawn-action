@@ -452,8 +452,30 @@ func set_weapon(kind: String) -> void:
         _body_ready = false
         _rendered_weapon = ""
         _body.visible = false
+        # An unrelated foreground/optional atlas must not keep the selected
+        # weapon waiting for up to its full timeout. The one active request
+        # slot belongs to the newly selected weapon if its bank is uncached.
+        _cancel_obsolete_foreground_atlas()
     _install_or_request_weapon()
     queue_redraw()
+
+func _cancel_obsolete_foreground_atlas() -> void:
+    if _atlas_request == null or _atlas_request_weapon == _weapon:
+        return
+    var obsolete := _atlas_request
+    _atlas_request = null
+    _atlas_request_weapon = ""
+    _atlas_request_layout = ""
+    if obsolete.request_completed.is_connected(_on_atlas_loaded):
+        obsolete.request_completed.disconnect(_on_atlas_loaded)
+    obsolete.cancel_request()
+    obsolete.queue_free()
+
+func _resume_selected_weapon_after_optional_atlas() -> void:
+    # Optional callbacks may finish just as an uncached weapon is selected.
+    # They must not return leaving Matthias invisible and input frozen.
+    if not _body_ready and _atlas_request == null:
+        call_deferred("_install_or_request_weapon")
 
 func set_combat_state(hurt_remaining: float, invuln_remaining: float, dead: bool, death_progress: float) -> void:
     var became_dead := dead and not _dead
@@ -1021,9 +1043,11 @@ func _request_atlas(weapon_id: String, url: String, layout: String) -> void:
         _atlas_request_layout = ""
         if layout == "run12-v22":
             push_warning("Matthias run12 v22 request could not start; keeping eight-frame run")
+            _resume_selected_weapon_after_optional_atlas()
             return
         if layout == "locomotion-v10":
             push_warning("Matthias v10 locomotion request could not start; keeping strict-v9")
+            _resume_selected_weapon_after_optional_atlas()
             return
         if layout in ["full-v9", "full-v7-source"] and _request_full_fallback(weapon_id):
             return
@@ -1043,9 +1067,11 @@ func _on_atlas_loaded(result: int, response_code: int, _headers: PackedStringArr
     if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
         if requested_layout == "run12-v22":
             push_warning("Matthias run12 v22 download failed; keeping eight-frame run")
+            _resume_selected_weapon_after_optional_atlas()
             return
         if requested_layout == "locomotion-v10":
             push_warning("Matthias v10 locomotion download failed; keeping strict-v9")
+            _resume_selected_weapon_after_optional_atlas()
             return
         if requested_layout in ["full-v9", "full-v7-source"] and _request_full_fallback(requested_weapon):
             return
@@ -1055,9 +1081,11 @@ func _on_atlas_loaded(result: int, response_code: int, _headers: PackedStringArr
     if image == null:
         if requested_layout == "run12-v22":
             push_warning("Matthias run12 v22 PNG decode failed; keeping eight-frame run")
+            _resume_selected_weapon_after_optional_atlas()
             return
         if requested_layout == "locomotion-v10":
             push_warning("Matthias v10 locomotion PNG decode failed; keeping strict-v9")
+            _resume_selected_weapon_after_optional_atlas()
             return
         if requested_layout in ["full-v9", "full-v7-source"] and _request_full_fallback(requested_weapon):
             return
@@ -1100,6 +1128,7 @@ func _on_atlas_loaded(result: int, response_code: int, _headers: PackedStringArr
                     _restore_locomotion_phase(run_phase)
         else:
             push_warning("Matthias run12 v22 atlas rejected for %s; keeping eight-frame run" % requested_weapon)
+        _resume_selected_weapon_after_optional_atlas()
         return
 
     elif requested_layout == "locomotion-v10":
@@ -1109,6 +1138,7 @@ func _on_atlas_loaded(result: int, response_code: int, _headers: PackedStringArr
                 _install_frames(_full_frames_by_weapon[requested_weapon], true)
         else:
             push_warning("Matthias strict-v10 locomotion atlas rejected; keeping strict-v9")
+        _resume_selected_weapon_after_optional_atlas()
         return
 
     elif requested_layout == "directional-v8":
@@ -1121,6 +1151,7 @@ func _on_atlas_loaded(result: int, response_code: int, _headers: PackedStringArr
                 "Matthias directional v8 atlas invalid for %s: %s"
                 % [requested_weapon, image.get_size()]
             )
+        _resume_selected_weapon_after_optional_atlas()
         return
 
     if requested_layout == "directional-v7-source":
