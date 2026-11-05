@@ -53,6 +53,11 @@ const V9_ACTION_FRAME_COUNT_OVERRIDES := {
 }
 const WEAPON_BOOTSTRAP_ORDER := ["pistol", "machinegun", "shotgun", "panzerfaust"]
 const BOOTSTRAP_RETRY_LIMIT := 2
+# HTTPRequest.timeout defaults to 0 (infinite). A lost CDN response must
+# release a selected weapon's hidden body to the existing retry/fallback path.
+# Large authored full banks can be slow on mobile, so this is a conservative
+# per-attempt wall-clock ceiling, not an aggressive short CDN timeout.
+const ATLAS_DOWNLOAD_TIMEOUT_SECONDS := 75.0
 
 # v10 remains an experimental candidate only. Runtime now uses the coherent
 # strict-v17 tactical bank; v10 stays disabled because its mixed silhouettes
@@ -797,6 +802,7 @@ func _start_bootstrap_request(
         _settle_bootstrap_request(weapon_id, layout, false)
         return
     var request := HTTPRequest.new()
+    request.timeout = ATLAS_DOWNLOAD_TIMEOUT_SECONDS
     request.name = "Bootstrap_%s_%s_%d" % [weapon_id, layout, attempt]
     add_child(request)
     _bootstrap_requests.append(request)
@@ -818,6 +824,8 @@ func _on_bootstrap_atlas_loaded(
     request: HTTPRequest,
 ) -> void:
     _dispose_bootstrap_request(request)
+    if result == HTTPRequest.RESULT_TIMEOUT:
+        push_warning("Matthias atlas timeout: %s %s attempt %d" % [weapon_id, layout, attempt + 1])
     if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
         var url := String(
             FULL_ATLAS_URLS.get(weapon_id, "")
@@ -1003,6 +1011,7 @@ func _request_atlas(weapon_id: String, url: String, layout: String) -> void:
     _atlas_request_weapon = weapon_id
     _atlas_request_layout = layout
     _atlas_request = HTTPRequest.new()
+    _atlas_request.timeout = ATLAS_DOWNLOAD_TIMEOUT_SECONDS
     add_child(_atlas_request)
     _atlas_request.request_completed.connect(_on_atlas_loaded)
     if _atlas_request.request(url) != OK:
@@ -1028,6 +1037,8 @@ func _on_atlas_loaded(result: int, response_code: int, _headers: PackedStringArr
         _atlas_request = null
     _atlas_request_weapon = ""
     _atlas_request_layout = ""
+    if result == HTTPRequest.RESULT_TIMEOUT:
+        push_warning("Matthias active atlas timeout: %s %s" % [requested_weapon, requested_layout])
 
     if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
         if requested_layout == "run12-v22":
@@ -1744,6 +1755,7 @@ func _ensure_master() -> void:
     if _master_request != null:
         return
     _master_request = HTTPRequest.new()
+    _master_request.timeout = ATLAS_DOWNLOAD_TIMEOUT_SECONDS
     add_child(_master_request)
     _master_request.request_completed.connect(_on_master_loaded)
     if _master_request.request(MASTER_URL) != OK:

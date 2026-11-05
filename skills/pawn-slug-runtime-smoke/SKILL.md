@@ -82,6 +82,26 @@ PAWN_SLUG_STAGE=jungle_relay_v1 godot --headless --fixed-fps 60 --path games/paw
 
 Sin `--fixed-fps 60` el headless corre en tiempo real (~10× más lento).
 
+## Recuperación de un atlas crítico
+
+Las solicitudes `HTTPRequest` de bancos estrictos, fondos de warmup,
+foreground excepcional y master de emergencia tienen un límite de 75 segundos
+**por intento**; el valor predeterminado de Godot era 0 (espera indefinida).
+Un fallo de red/timeout debe atravesar las mismas rutas de reintento y
+fallback existentes: jamás se acredita `body_ready()` ni se reutiliza el
+sprite del arma anterior mientras no haya un banco válido.
+
+`tests/matthias_atlas_recovery_smoke.gd` reproduce sin CDN el pickup de
+SMG mientras su descarga de fondo sigue activa, su agotamiento y la
+reactivación de una solicitud foreground; verifica que se conserva el
+arma nueva y que solo el banco correcto devuelve el estado jugable.
+
+Si **todos** los orígenes (strict, fallback y master) están inaccesibles,
+el sistema no puede inventar un sprite; el error sigue siendo de assets y
+requiere diagnóstico/UX explícita en una futura iteración. Esta prueba
+no acredita que Chess Studio legado —un export Web inmutable— se haya
+corregido por sí mismo.
+
 ## Readiness
 
 Los assets canónicos pueden introducir varianza de cold boot. Usar el timeout versionado del propio test/workflow y calibrarlo con evidencia de runner; actualmente el bridge contempla una ventana de arranque fría más amplia que un boot local caliente.

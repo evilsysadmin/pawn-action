@@ -72,6 +72,7 @@ jobs:
           set -euo pipefail
           godot="$GITHUB_WORKSPACE/.godot-ci/$GODOT_VERSION/godot"
           "$godot" --headless --path games/pawn-slug-godot --script res://tests/player_runtime_smoke.gd
+          "$godot" --headless --path games/pawn-slug-godot --script res://tests/matthias_atlas_recovery_smoke.gd
           "$godot" --headless --path games/pawn-slug-godot --script res://tests/enemy_initial_v4_atlas_smoke.gd
       - name: All four campaign stages remain traversable
         shell: bash
