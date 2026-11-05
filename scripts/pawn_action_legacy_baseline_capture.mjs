@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { captureMatchedPistolJump } from './pawn_action_matched_jump.mjs';
+import { probeRealSmgFire } from './pawn_action_legacy_smg_fire_probe.mjs';
 
 const requireE2e = createRequire(new URL('../e2e/package.json', import.meta.url));
 const ORIGIN = 'https://assets.chess-studio.shadowops.dpdns.org';
@@ -112,6 +113,20 @@ async function installProbe(page) {
   await page.addInitScript(() => {
     window.__legacyReady = false;
     window.__legacyEvents = [];
+    // Read-only CI browser event audit, never a substitute for Godot evidence.
+    window.__legacyInputAudit = [];
+    const audit = event => {
+      if (event.type.startsWith('key') &&
+          !['z','j','ArrowRight'].includes(String(event.key))) return;
+      if (window.__legacyInputAudit.length < 100) window.__legacyInputAudit.push({
+        type:event.type, key:event.type.startsWith('key') ? String(event.key) : '',
+        trusted:event.isTrusted, focused:document.hasFocus(),
+        target:event.target?.tagName || '', active:document.activeElement?.tagName || '',
+      });
+    };
+    for (const type of ['keydown','keyup','mousedown','mouseup']) {
+      window.addEventListener(type,audit,true);
+    }
     // The legacy Godot bootstrap reads this JS bridge variable, not the URL.
     // Keep the query parameter as explicit capture intent and bridge it here.
     const probe = new URLSearchParams(window.location.search);
@@ -224,6 +239,7 @@ async function main() {
       let smgReady = false;
       let smgPickup = false;
       let smgFired = false;
+      let smgAttempts = [];
       let smgReason = '';
       try {
         await smg.goto(index + '&pickupProbe=machinegun', {
@@ -246,31 +262,36 @@ async function main() {
           await smg.keyboard.up('ArrowRight');
         }
 
-        // A weapon-changed message proves pickup/selection, but cannot
-        // establish that the large remote SMG atlas finished decoding.
-        // Godot will not emit player-fired while its body is not ready.
-        for (let attempt = 0; attempt < 24 && !smgFired; attempt += 1) {
-          const firedBefore = await smg.evaluate(() =>
-            window.__legacyEvents.filter(type => type === 'player-fired').length);
-          await smg.keyboard.down('z');
-          try { await smg.waitForTimeout(240); }
-          finally { await smg.keyboard.up('z'); }
-          smgFired = await smg.evaluate(before =>
-            window.__legacyEvents.filter(type => type === 'player-fired').length > before,
-            firedBefore);
-          if (!smgFired) await smg.waitForTimeout(450);
-        }
-        if (!smgFired) throw new Error('SMG pickup succeeded, but Godot never fired after 24 pulses');
+        // Distinguish lost keyboard input/focus from a real Godot freeze:
+        // all three controls are authored in player.gd, never injected.
+        const readShots = () => smg.evaluate(() =>
+          window.__legacyEvents.filter(type => type === 'player-fired').length);
+        const fireProbe = await probeRealSmgFire(smg, readShots);
+        smgFired = fireProbe.fired;
+        smgAttempts = fireProbe.attempts;
+        if (!smgFired) throw new Error(
+          'SMG picked up, but Z/J/mouse emitted no real Godot player-fired'
+        );
       } catch (error) {
         smgReason = String(error.message || error);
       }
       const smgEvents = await smg.evaluate(() => (
         Array.isArray(window.__legacyEvents) ? window.__legacyEvents.slice(-50) : []
       )).catch(() => []);
-      const verifiedSmg = smgReady && smgPickup && smgFired;
+      const verifiedSmg = smgReady && smgPickup && smgFired &&
+        smgEvents.includes('weapon-pickup') && smgEvents.includes('weapon-changed');
+      const inputState = await smg.evaluate(() => ({
+        visibility:document.visibilityState, focused:document.hasFocus(),
+        active:document.activeElement?.tagName || '',
+        domEvents:Array.isArray(window.__legacyInputAudit)
+          ? window.__legacyInputAudit.slice(-70) : [],
+      })).catch(() => ({unavailable:true}));
       let smgEvidence = {
         status: 'not_proven', method: 'pistol_ready_then_authored_pickup_at_x1240',
-        ready: smgReady, weaponChanged: smgPickup, firedAfterPickup: smgFired,
+        ready: smgReady, weaponChanged: smgPickup,
+        weaponPickup: smgEvents.includes('weapon-pickup'),
+        firedAfterPickup: smgFired, inputAttempts: smgAttempts,
+        browserInput: inputState,
         events: smgEvents, reason: smgReason || 'missing pickup/shot evidence',
         errors: smgErrors,
       };
@@ -284,7 +305,8 @@ async function main() {
         };
         smgEvidence = {
           status: 'captured_verified', method: 'pistol_ready_then_authored_pickup_at_x1240',
-          ready: true, weaponChanged: true, firedAfterPickup: true,
+          ready: true, weaponChanged: true, weaponPickup: true,
+          firedAfterPickup: true, inputAttempts: smgAttempts, browserInput: inputState,
           events: smgEvents, errors: smgErrors,
         };
       } else {

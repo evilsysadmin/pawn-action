@@ -63,6 +63,14 @@ rechaza un PNG sin hash válido. La posición se controla por el mismo
 inicio y evento; **no** se finge identidad de fotograma ni tiempo de animación.
 El método no modifica ni inyecta código en el export Web legado.
 
+Para investigar falsos negativos intermitentes, el test legado revalida
+foco/primer plano y mantiene tres entradas auténticas durante varios ticks
+(`Z`, `J` y botón izquierdo). Registra fases y eventos DOM reales
+(`isTrusted`) junto con las señales recibidas del bridge. **Solo**
+`player-fired` real después del pickup acredita el SMG, nunca una
+pulsación reconocida o la imagen del arma. La regresión del protocolo
+es obligatoria en el smoke Web de Pawn Action.
+
 Si el pickup o el disparo no se acreditan, registra estado
 `candidate_partial_not_approved`, eventos/errores y
 `smg-unverified-diagnostic.png`; no etiqueta un arma no probada.
