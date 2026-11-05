@@ -53,6 +53,13 @@ conditions are met:
 
 These are safeguards, **not** permission to cut over. The R2 configuration
 is still copied from Chess Studio and points at the **shared bucket**.
+**Live publication to that shared bucket or its public Chess Studio hostname
+is now explicitly rejected, even if the operator provides matching approval
+variables.** Dry-run and read-only verification remain available. The actual
+protected staging delivery is owned by
+[ShadowOps Infra](https://github.com/evilsysadmin/shadowops-infra), which
+implements its own manual private-R2 admission/publisher. Neither repository
+may repoint production or release on the strength of a CI-only review.
 A shared destination can be explicitly approved only after assigning an
 independently authorized, appropriately scoped token to this repository,
 confirming the `pawn-action/` prefix is protected from Chess Studio GC,
@@ -73,9 +80,11 @@ python3 -S scripts/pawn_slug_godot_bundle.py inspect-current
 # Copy the reported currentPointerSha256 (64 lowercase hex) or "absent".
 # A missing or unreviewed value must fail before any Cloudflare write.
 export EXPECTED_CURRENT_POINTER_SHA256='absent'  # example: *only* for verified first release
-# Only after human visual approval and permission/GC checks:
-python3 -S scripts/pawn_slug_godot_bundle.py publish --confirm-publish \
-  --expected-current-pointer-sha256 "$EXPECTED_CURRENT_POINTER_SHA256"
+# This legacy direct publisher MUST NOT be run against the copied
+# chess-studio-assets config. For staging, use shadowops-infra's guarded
+# private-R2 admission after the visual/source approval gates instead.
+# An isolated release workflow (if ever authorized) must still supply the
+# reviewed expected-current-pointer-sha256 and its own single-writer control.
 ```
 
 A live publication refuses a missing or stale expected fingerprint before

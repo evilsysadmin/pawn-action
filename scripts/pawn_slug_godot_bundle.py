@@ -148,6 +148,23 @@ def _authorize_publish(prefix: str, *, dry_run: bool, confirmed: bool) -> None:
 
 
 
+def _reject_legacy_shared_live_destination(config: dict[str, Any]) -> None:
+    """Never publish the standalone Web export into Chess Studio's public bucket.
+
+    Staging Web artifacts are admitted and published by shadowops-infra to its
+    separately verified private bucket. Even explicit copied-bucket credentials
+    must not bypass this check during the handoff.
+    """
+    if (
+        config.get("bucket") == "chess-studio-assets"
+        or config.get("customDomain") == "assets.chess-studio.shadowops.dpdns.org"
+    ):
+        raise BundleError(
+            "Pawn Action live publish to Chess Studio's shared/public R2 destination "
+            "is forbidden; use shadowops-infra private staging release admission"
+        )
+
+
 def _require_publish_authority(config: dict[str, Any]) -> tuple[str, str]:
     """Require a deliberate Pawn Action destination and dedicated credentials.
 
@@ -246,6 +263,10 @@ def publish(build_dir: pathlib.Path, config_path: pathlib.Path, prefix: str,
             "<64hex|absent> from authenticated inspect-current"
         )
     config = core.load_config(config_path)
+    # The copied config is a compatibility snapshot, not a publish destination.
+    # Block the legacy shared/public bucket even when dedicated env values match.
+    if not dry_run:
+        _reject_legacy_shared_live_destination(config)
     # Refuse accidental live writes before reading/building an export or
     # making any Cloudflare request. Credential-less dry runs stay usable.
     credentials = None if dry_run else _require_publish_authority(config)
@@ -381,6 +402,24 @@ def self_test() -> None:
                 else:
                     raise AssertionError("Unauthorized Pawn Action R2 destination/credentials accepted")
 
+        # Explicit approval variables cannot authorize writing to Chess Studio.
+        for unsafe in (
+            {"bucket": "chess-studio-assets", "customDomain": target["customDomain"]},
+            {"bucket": target["bucket"], "customDomain": "assets.chess-studio.shadowops.dpdns.org"},
+        ):
+            with patch.dict(os.environ, {
+                "PAWN_ACTION_R2_PUBLISH_BUCKET": unsafe["bucket"],
+                "PAWN_ACTION_R2_PUBLISH_DOMAIN": unsafe["customDomain"],
+                "PAWN_ACTION_CLOUDFLARE_API_TOKEN": "isolated-test-token",
+                "PAWN_ACTION_CLOUDFLARE_ACCOUNT_ID": "isolated-test-account",
+            }, clear=True):
+                try:
+                    _reject_legacy_shared_live_destination(unsafe)
+                except BundleError:
+                    pass
+                else:
+                    raise AssertionError("Shared/public R2 destination was accepted")
+        _reject_legacy_shared_live_destination(target)
         expect_authority_rejection({})
         expect_authority_rejection({
             "CLOUDFLARE_API_TOKEN": "legacy-token",
