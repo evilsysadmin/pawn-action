@@ -3,9 +3,19 @@ extends SceneTree
 const ArtProbe := preload("res://tests/matthias_atlas_recovery_probe.gd")
 const MatthiasArt := preload("res://scripts/matthias_art.gd")
 var _failures: Array[String] = []
+var _completed := false
 
 func _initialize() -> void:
     call_deferred("_run")
+    call_deferred("_watchdog")
+
+func _watchdog() -> void:
+    # SceneTree scripts can keep running after a runtime assertion/error.
+    # Bound failures so CI reports them rather than hanging the entire job.
+    await create_timer(12.0).timeout
+    if not _completed:
+        push_error("Matthias atlas recovery smoke timed out (check preceding Godot errors)")
+        quit(1)
 
 func _expect(value: bool, note: String) -> void:
     if value:
@@ -87,6 +97,7 @@ func _run() -> void:
     MatthiasArt._v9_ready_by_weapon.erase("machinegun")
     art.queue_free()
     await process_frame
+    _completed = true
     if not _failures.is_empty():
         print("FAIL Matthias atlas recovery: %d" % _failures.size())
         quit(1)
