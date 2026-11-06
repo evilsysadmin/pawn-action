@@ -16,6 +16,13 @@ window/size/window_height_override=720
 window/size/mode=0
 window/stretch/mode="canvas_items"
 
+[input_devices]
+
+; Touches must remain touch events, not synthetic left-clicks on FIRE.
+; Unlike disabling mouse input when a touchscreen exists, this preserves
+; an actual mouse on hybrid laptops/tablets while TouchControls is visible.
+pointing/emulate_mouse_from_touch=false
+
 [audio]
 
 driver/enable_input=false

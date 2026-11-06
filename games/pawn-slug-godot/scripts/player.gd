@@ -1010,17 +1010,6 @@ func _jump_pressed() -> bool:
     var joypads := Input.get_connected_joypads()
     return not joypads.is_empty() and Input.is_joy_button_pressed(joypads[0], JOY_BUTTON_A)
 
-func _mouse_can_fire() -> bool:
-    # Browsers may emulate a left mouse click for any touch on a virtual
-    # button (move/jump/grenade/pause). When touchscreen controls are active,
-    # the dedicated FIRE button is the only touch source of shooting.
-    # Keyboard/controller firing remains available in both modes.
-    return (
-        _touch_controls == null
-        or not _touch_controls.has_method("is_touch_enabled")
-        or not bool(_touch_controls.is_touch_enabled())
-    )
-
 func _fire_pressed() -> bool:
     if _touch_controls != null and bool(_touch_controls.fire_pressed()):
         return true
@@ -1028,7 +1017,7 @@ func _fire_pressed() -> bool:
         Input.is_key_pressed(KEY_Z)
         or Input.is_key_pressed(KEY_J)
         or Input.is_key_pressed(KEY_ENTER)
-        or (_mouse_can_fire() and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
+        or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
     ):
         return true
     var joypads := Input.get_connected_joypads()
