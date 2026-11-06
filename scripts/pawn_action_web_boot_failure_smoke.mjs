@@ -50,6 +50,7 @@ try {
   const desktop = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   const { page, visits } = await preparePage(desktop, '/pawn-action-boot-error-probe');
   await page.waitForSelector('#boot-error:not([hidden])');
+  await page.waitForFunction(() => window.__pawnActionBootEvents.includes('load-error'));
   const failure = await page.evaluate(() => ({
     errorVisible: document.getElementById('boot-error')?.hidden === false,
     accessible: document.getElementById('boot-error')?.getAttribute('role') === 'alert'
