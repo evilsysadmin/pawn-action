@@ -370,6 +370,11 @@ func select_weapon(id: String) -> bool:
         return false
     if int(slot["ammo"]) == 0:
         return false
+    if weapon == id:
+        # Ammo pickups for the equipped weapon still refresh the HUD, but
+        # reselecting must never bypass cadence or restart the fire trigger.
+        weapon_changed.emit(weapon, current_ammo())
+        return true
     weapon = id
     fire_cooldown = 0.0
     _fire_was_pressed = _fire_pressed()
@@ -387,7 +392,9 @@ func _cycle_weapon(step: int) -> bool:
     if current_index < 0:
         current_index = 0
     var direction := 1 if step > 0 else -1
-    for offset in range(1, WEAPON_ORDER.size() + 1):
+    # Do not wrap back onto the currently equipped gun when there is no
+    # alternative; it would emit a fake weapon change and reset its cadence.
+    for offset in range(1, WEAPON_ORDER.size()):
         var index := (current_index + direction * offset) % WEAPON_ORDER.size()
         if index < 0:
             index += WEAPON_ORDER.size()
