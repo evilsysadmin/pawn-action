@@ -139,6 +139,31 @@ async function grenadeViaTouch() {
   }
 }
 
+// Hybrid touchscreen + physical mouse: an actual browser mouse must still
+// fire on the canvas, even when the virtual mobile buttons are active.
+// This detects the earlier regression where _mouse_can_fire() blocked all
+// mouse input whenever TouchControls.is_touch_enabled() was true.
+async function mouseFireOnTouchDevice() {
+  await page.locator('canvas').focus();
+  const center = { x: Math.round(viewport.width * 0.50),
+    y: Math.round(viewport.height * 0.40) };
+  const before = await page.evaluate(() =>
+    window.__pawnActionEvents.filter((type) => type === 'player-fired').length);
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down({ button: 'left' });
+  try {
+    await page.waitForTimeout(350);
+  } finally {
+    await page.mouse.up({ button: 'left' });
+  }
+  const after = await page.evaluate(() =>
+    window.__pawnActionEvents.filter((type) => type === 'player-fired').length);
+  if (after <= before) {
+    throw new Error('Physical mouse click cannot fire on a touch-capable device');
+  }
+  return { point: center, shots: after - before, touchEnabled: true };
+}
+
 const results = { schema: 1, viewport, phases: [] };
 try {
   results.phases.push({ phase: 'cold', ...await boot() });
@@ -149,6 +174,9 @@ try {
 
   results.phases.push({ phase: 'touch-grenade', ...await grenadeViaTouch() });
   await page.screenshot({ path: outputDir + '/mobile-landscape-grenade.png' });
+
+  results.phases.push({ phase: 'mouse-fire-on-touch-device',
+    ...await mouseFireOnTouchDevice() });
 
   results.phases.push({ phase: 'reload', ...await boot({ reload: true }) });
   results.phases.push({ phase: 'touch-fire-after-reload', ...await fireViaTouch() });
