@@ -62,6 +62,46 @@ func _run() -> void:
     var player = _make_player(world, Vector2(0.0, 137.0))
     await physics_frame
 
+    # Re-selecting the already equipped pistol must never let key spam
+    # reset fire cooldown / semi-auto edge state. A single unlocked weapon
+    # is not a cycle target, but same-weapon ammo updates still reach the HUD.
+    var selector = _make_player(world, Vector2(-250.0, 137.0))
+    var weapon_updates: Array[Dictionary] = []
+    selector.weapon_changed.connect(func(weapon_id: String, ammo_left: int) -> void:
+        weapon_updates.append({"weapon": weapon_id, "ammo": ammo_left})
+    )
+    selector.fire_cooldown = 0.17
+    selector._fire_was_pressed = true
+    _expect(selector.select_weapon("pistol"), "re-seleccionar pistola sigue siendo válido")
+    _expect(absf(selector.fire_cooldown - 0.17) <= EPSILON,
+        "re-selección de la misma arma no reinicia cadencia")
+    _expect(selector._fire_was_pressed,
+        "re-selección no borra el flanco del gatillo semiautomático")
+    _expect(weapon_updates.size() == 1 and
+        weapon_updates[0]["weapon"] == "pistol" and
+        int(weapon_updates[0]["ammo"]) == -1,
+        "HUD recibe actualización sin recargar sprite de la pistola")
+    _expect(not selector.cycle_weapon(1) and not selector.cycle_weapon(-1),
+        "Q/E no hace falso cambio si solo está desbloqueada la pistola")
+    _expect(weapon_updates.size() == 1 and
+        absf(selector.fire_cooldown - 0.17) <= EPSILON,
+        "Q/E sin alternativa no emite cambios ni acorta cooldown")
+    # Simulate having picked a machinegun earlier. Recollecting machinegun
+    # ammo while it is already equipped must update the HUD but not affect
+    # a burst currently in progress.
+    selector.weapon = "machinegun"
+    selector.arsenal["machinegun"] = {"unlocked": true, "ammo": 5}
+    selector.fire_cooldown = 0.06
+    _expect(selector.grant_weapon("machinegun", 12),
+        "pickup vuelve a suministrar munición del arma equipada")
+    _expect(selector.current_ammo() == 17 and weapon_updates.size() == 2 and
+        weapon_updates[1]["weapon"] == "machinegun" and
+        int(weapon_updates[1]["ammo"]) == 17,
+        "HUD refleja +12 munición al mismo arma sin cambiar loadout")
+    _expect(absf(selector.fire_cooldown - 0.06) <= EPSILON,
+        "pickup repetido no permite acortar ráfagas de la machinegun")
+    selector.queue_free()
+
     var standing_rect: Rect2 = player.combat_hitbox_rect()
     player.force_crouching(true)
     var crouched_rect: Rect2 = player.combat_hitbox_rect()
