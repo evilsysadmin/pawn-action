@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { captureMatchedPistolJump } from './pawn_action_matched_jump.mjs';
+import { safeResourceUrl, makeBootFailureReport } from './pawn_action_boot_diagnostics.mjs';
 
 const requireFromE2e = createRequire(new URL('../e2e/package.json', import.meta.url));
 const { chromium } = requireFromE2e('playwright');
@@ -26,6 +27,28 @@ if (stageIds.length === 0) {
 await mkdir(outputDir, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+
+// Preserve bounded, sanitized evidence when Chromium never receives Godot's
+// 'ready'. A raw timeout without page/network state cannot distinguish bad
+// Web exports from a transient remote atlas or browser initialization issue.
+const bootIssues = { consoleErrors: [], pageErrors: [], failedRequests: [], failedResponses: [] };
+function noteBootIssue(category, detail) {
+  const items = bootIssues[category];
+  items.push(String(detail));
+  if (items.length > 20) items.splice(0, items.length - 20);
+}
+page.on('console', (message) => {
+  if (message.type() === 'error') noteBootIssue('consoleErrors', message.text());
+});
+page.on('pageerror', (error) => noteBootIssue('pageErrors', error.message));
+page.on('requestfailed', (request) => {
+  noteBootIssue('failedRequests', safeResourceUrl(request.url()) + ' ' + (request.failure()?.errorText || 'request-failed'));
+});
+page.on('response', (response) => {
+  if (response.status() >= 400) {
+    noteBootIssue('failedResponses', String(response.status()) + ' ' + safeResourceUrl(response.url()));
+  }
+});
 
 await page.addInitScript(() => {
   window.__pawnSlugCaptureReady = false;
@@ -72,9 +95,34 @@ function urlForStage(stageId, { visualProbe = false, weaponProbe = '', jumpProbe
 
 async function loadStage(stageId, options = {}) {
   const url = urlForStage(stageId, options);
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
-  await page.waitForSelector('canvas', { state: 'visible', timeout: 45_000 });
-  await page.waitForFunction(() => window.__pawnSlugCaptureReady === true, null, { timeout: 45_000 });
+  for (const entries of Object.values(bootIssues)) entries.length = 0;
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    await page.waitForSelector('canvas', { state: 'visible', timeout: 45_000 });
+    await page.waitForFunction(() => window.__pawnSlugCaptureReady === true, null, { timeout: 45_000 });
+  } catch (error) {
+    const dom = await page.evaluate(() => ({
+      ready: window.__pawnSlugCaptureReady === true,
+      canvasPresent: document.querySelector('canvas') !== null,
+      canvasReady: document.querySelector('canvas')?.classList.contains('is-ready') === true,
+      bootPresent: document.getElementById('boot') !== null,
+      events: Array.isArray(window.__pawnSlugCaptureEvents) ? window.__pawnSlugCaptureEvents.slice(-20) : [],
+    })).catch(() => null);
+    const report = makeBootFailureReport({
+      stage: stageId, reason: error instanceof Error ? error.message : String(error),
+      dom, ...bootIssues,
+    });
+    // The workflow uploads visual-evidence/ even when the browser step fails.
+    const safeStage = stageId.replace(/[^a-z0-9_-]/gi, '_');
+    const reportPath = outputDir + '/boot-failure-' + safeStage + '.json';
+    await writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
+    await page.screenshot({
+      path: outputDir + '/boot-failure-' + safeStage + '.png',
+      fullPage: false, timeout: 4000,
+    }).catch(() => {});
+    throw new Error('Pawn Action Web failed to become ready; diagnostics at ' +
+      reportPath + ': ' + JSON.stringify(report), { cause: error });
+  }
   await page.waitForTimeout(1600);
 
   const canvasLocator = page.locator('canvas');
