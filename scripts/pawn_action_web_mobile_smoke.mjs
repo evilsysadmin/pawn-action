@@ -122,13 +122,15 @@ async function grenadeViaTouch() {
         grenades: window.__pawnActionEvents.filter((type) => type === 'grenade-thrown').length,
         shots: window.__pawnActionEvents.filter((type) => type === 'player-fired').length,
       }));
-      if (after.shots !== before.shots) {
-        throw new Error('Touch GR also fired an unintended bullet: ' +
-          JSON.stringify({ before, after, target }));
-      }
       if (after.grenades > before.grenades) {
+        // Prior layout probes may hit an unrelated control; only a touch
+        // that actually throws a grenade is evidence about GR isolation.
+        if (after.shots !== before.shots) {
+          throw new Error('Touch GR also fired an unintended bullet: ' +
+            JSON.stringify({ before, after, target }));
+        }
         return { target, throws: after.grenades - before.grenades,
-          unwantedShots: after.shots - before.shots };
+          unwantedShots: 0 };
       }
     }
     throw new Error('Held touchscreen GR never emitted grenade-thrown from Godot');
