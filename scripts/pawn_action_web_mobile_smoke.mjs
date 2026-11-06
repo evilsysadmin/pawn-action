@@ -103,8 +103,10 @@ async function grenadeViaTouch() {
   ];
   try {
     for (const target of targets) {
-      const before = await page.evaluate(() =>
-        window.__pawnActionEvents.filter((type) => type === 'grenade-thrown').length);
+      const before = await page.evaluate(() => ({
+        grenades: window.__pawnActionEvents.filter((type) => type === 'grenade-thrown').length,
+        shots: window.__pawnActionEvents.filter((type) => type === 'player-fired').length,
+      }));
       await client.send('Input.dispatchTouchEvent', {
         type: 'touchStart',
         touchPoints: [{ id: 1, x: Math.round(target.x), y: Math.round(target.y) }],
@@ -116,9 +118,18 @@ async function grenadeViaTouch() {
           type: 'touchEnd', touchPoints: [],
         });
       }
-      const after = await page.evaluate(() =>
-        window.__pawnActionEvents.filter((type) => type === 'grenade-thrown').length);
-      if (after > before) return { target, throws: after - before };
+      const after = await page.evaluate(() => ({
+        grenades: window.__pawnActionEvents.filter((type) => type === 'grenade-thrown').length,
+        shots: window.__pawnActionEvents.filter((type) => type === 'player-fired').length,
+      }));
+      if (after.shots !== before.shots) {
+        throw new Error('Touch GR also fired an unintended bullet: ' +
+          JSON.stringify({ before, after, target }));
+      }
+      if (after.grenades > before.grenades) {
+        return { target, throws: after.grenades - before.grenades,
+          unwantedShots: after.shots - before.shots };
+      }
     }
     throw new Error('Held touchscreen GR never emitted grenade-thrown from Godot');
   } finally {
