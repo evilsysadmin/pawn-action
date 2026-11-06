@@ -117,7 +117,7 @@ jobs:
         timeout-minutes: 12
         run: |
           set -euo pipefail
-          node --test tests/test_pawn_action_legacy_smg_fire_probe.mjs
+          node --test tests/test_pawn_action_legacy_smg_fire_probe.mjs tests/test_pawn_action_boot_diagnostics.mjs
           npm ci --prefix e2e --ignore-scripts
           ./e2e/node_modules/.bin/playwright install --with-deps chromium
           python3 -m http.server 4179 --bind 127.0.0.1 --directory games/pawn-slug-godot/build/web > "$RUNNER_TEMP/pawn-action-server.log" 2>&1 &
