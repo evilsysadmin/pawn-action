@@ -1,0 +1,1005 @@
+{
+  "id": "jungle_relay_v1",
+  "version": 2,
+  "theme": "jungle_storm",
+  "world": {
+    "width": 5500,
+    "height": 720,
+    "floor_y": 610,
+    "start_x": 110,
+    "floor_depth": 110,
+    "boundary_thickness": 40
+  },
+  "checkpoints": [
+    110,
+    1580,
+    3160,
+    4480
+  ],
+  "platforms": [
+    {
+      "x": 410,
+      "y": 520,
+      "w": 180,
+      "h": 24,
+      "kind": "low_bridge",
+      "material": "wood"
+    },
+    {
+      "x": 520,
+      "y": 330,
+      "w": 132,
+      "h": 20,
+      "kind": "relay_perch",
+      "material": "wood",
+      "one_way": true,
+      "visual": {
+        "lamp": true
+      }
+    },
+    {
+      "x": 650,
+      "y": 458,
+      "w": 150,
+      "h": 24,
+      "kind": "ruin_ledge",
+      "material": "stone"
+    },
+    {
+      "x": 860,
+      "y": 382,
+      "w": 210,
+      "h": 24,
+      "kind": "canopy_walk",
+      "material": "wood"
+    },
+    {
+      "x": 1130,
+      "y": 520,
+      "w": 200,
+      "h": 24,
+      "kind": "ruin_ledge",
+      "material": "stone"
+    },
+    {
+      "x": 1210,
+      "y": 306,
+      "w": 138,
+      "h": 20,
+      "kind": "relay_perch",
+      "material": "stone",
+      "one_way": true,
+      "visual": {
+        "sandbags": 5
+      }
+    },
+    {
+      "x": 1390,
+      "y": 446,
+      "w": 170,
+      "h": 24,
+      "kind": "wood_bridge",
+      "material": "wood",
+      "route": "climb"
+    },
+    {
+      "x": 1470,
+      "y": 360,
+      "w": 145,
+      "h": 24,
+      "kind": "climb_bridge",
+      "material": "wood",
+      "route": "climb"
+    },
+    {
+      "x": 1570,
+      "y": 275,
+      "w": 155,
+      "h": 24,
+      "kind": "canopy_perch",
+      "material": "wood",
+      "route": "climb"
+    },
+    {
+      "x": 1620,
+      "y": 370,
+      "w": 220,
+      "h": 24,
+      "kind": "canopy_walk",
+      "material": "wood"
+    },
+    {
+      "x": 1700,
+      "y": 330,
+      "w": 150,
+      "h": 24,
+      "kind": "climb_bridge",
+      "material": "wood",
+      "route": "climb"
+    },
+    {
+      "x": 1910,
+      "y": 492,
+      "w": 180,
+      "h": 24,
+      "kind": "ruin_ledge",
+      "material": "stone",
+      "one_way": true
+    },
+    {
+      "x": 1975,
+      "y": 402,
+      "w": 120,
+      "h": 20,
+      "kind": "root_step",
+      "material": "wood",
+      "one_way": true,
+      "route": "ravine_bypass"
+    },
+    {
+      "x": 2115,
+      "y": 342,
+      "w": 112,
+      "h": 20,
+      "kind": "ruin_step",
+      "material": "stone",
+      "one_way": true,
+      "route": "ravine_bypass"
+    },
+    {
+      "x": 2160,
+      "y": 426,
+      "w": 140,
+      "h": 24,
+      "kind": "ruin_ledge",
+      "material": "stone"
+    },
+    {
+      "x": 2370,
+      "y": 520,
+      "w": 190,
+      "h": 24,
+      "kind": "low_bridge",
+      "material": "wood"
+    },
+    {
+      "x": 2630,
+      "y": 456,
+      "w": 210,
+      "h": 24,
+      "kind": "ruin_ledge",
+      "material": "stone"
+    },
+    {
+      "x": 2900,
+      "y": 378,
+      "w": 200,
+      "h": 24,
+      "kind": "canopy_walk",
+      "material": "wood"
+    },
+    {
+      "x": 3170,
+      "y": 500,
+      "w": 170,
+      "h": 24,
+      "kind": "ruin_ledge",
+      "material": "stone"
+    },
+    {
+      "x": 3330,
+      "y": 308,
+      "w": 140,
+      "h": 20,
+      "kind": "relay_perch",
+      "material": "stone",
+      "one_way": true,
+      "visual": {
+        "lamp": true
+      }
+    },
+    {
+      "x": 3410,
+      "y": 438,
+      "w": 150,
+      "h": 24,
+      "kind": "ruin_ledge",
+      "material": "stone"
+    },
+    {
+      "x": 3640,
+      "y": 520,
+      "w": 220,
+      "h": 24,
+      "kind": "low_bridge",
+      "material": "wood"
+    },
+    {
+      "x": 3930,
+      "y": 404,
+      "w": 230,
+      "h": 24,
+      "kind": "canopy_walk",
+      "material": "wood",
+      "one_way": true,
+      "route": "canopy_assault"
+    },
+    {
+      "x": 4040,
+      "y": 318,
+      "w": 145,
+      "h": 24,
+      "kind": "canopy_perch",
+      "material": "wood",
+      "route": "canopy_assault",
+      "one_way": true
+    },
+    {
+      "x": 4165,
+      "y": 236,
+      "w": 155,
+      "h": 24,
+      "kind": "canopy_perch",
+      "material": "wood",
+      "route": "canopy_assault",
+      "one_way": true
+    },
+    {
+      "x": 4230,
+      "y": 472,
+      "w": 170,
+      "h": 24,
+      "kind": "ruin_ledge",
+      "material": "stone"
+    },
+    {
+      "x": 4300,
+      "y": 318,
+      "w": 155,
+      "h": 24,
+      "kind": "canopy_perch",
+      "material": "wood",
+      "route": "canopy_assault",
+      "one_way": true
+    },
+    {
+      "x": 4400,
+      "y": 404,
+      "w": 145,
+      "h": 24,
+      "kind": "canopy_perch",
+      "material": "wood",
+      "route": "canopy_assault",
+      "one_way": true
+    },
+    {
+      "x": 4460,
+      "y": 520,
+      "w": 190,
+      "h": 24,
+      "kind": "low_bridge",
+      "material": "wood"
+    },
+    {
+      "x": 4720,
+      "y": 392,
+      "w": 230,
+      "h": 24,
+      "kind": "canopy_walk",
+      "material": "wood"
+    },
+    {
+      "x": 4860,
+      "y": 304,
+      "w": 142,
+      "h": 20,
+      "kind": "relay_perch",
+      "material": "wood",
+      "one_way": true,
+      "visual": {
+        "sandbags": 5
+      }
+    },
+    {
+      "x": 5020,
+      "y": 454,
+      "w": 210,
+      "h": 24,
+      "kind": "ruin_ledge",
+      "material": "stone"
+    }
+  ],
+  "obstacles": [
+    {
+      "x": 900,
+      "y": 548,
+      "w": 78,
+      "h": 62,
+      "kind": "fallen_log"
+    },
+    {
+      "x": 1260,
+      "y": 536,
+      "w": 64,
+      "h": 74,
+      "kind": "stone_ruin"
+    },
+    {
+      "x": 1592,
+      "y": 548,
+      "w": 88,
+      "h": 62,
+      "kind": "sandbags"
+    },
+    {
+      "x": 2300,
+      "y": 542,
+      "w": 62,
+      "h": 68,
+      "kind": "root_mass"
+    },
+    {
+      "x": 3010,
+      "y": 540,
+      "w": 92,
+      "h": 70,
+      "kind": "stone_ruin"
+    },
+    {
+      "x": 3530,
+      "y": 548,
+      "w": 84,
+      "h": 62,
+      "kind": "fallen_log"
+    },
+    {
+      "x": 4660,
+      "y": 540,
+      "w": 90,
+      "h": 70,
+      "kind": "stone_ruin"
+    },
+    {
+      "x": 4910,
+      "y": 548,
+      "w": 84,
+      "h": 62,
+      "kind": "fallen_log"
+    }
+  ],
+  "enemies": [
+    {
+      "x": 800,
+      "type": "pawn"
+    },
+    {
+      "x": 957,
+      "type": "scout"
+    },
+    {
+      "x": 1114,
+      "type": "pawn"
+    },
+    {
+      "x": 1271,
+      "type": "knight"
+    },
+    {
+      "x": 1428,
+      "type": "commando"
+    },
+    {
+      "x": 1640,
+      "type": "rook",
+      "y": 275,
+      "route": "climb"
+    },
+    {
+      "x": 1742,
+      "type": "pawn",
+      "idle_pose": "sit",
+      "idle_reaction": 0.86
+    },
+    {
+      "x": 1899,
+      "type": "shield"
+    },
+    {
+      "x": 2056,
+      "type": "grenadier"
+    },
+    {
+      "x": 2213,
+      "type": "knight"
+    },
+    {
+      "x": 2370,
+      "type": "bishop"
+    },
+    {
+      "x": 2527,
+      "type": "pawn"
+    },
+    {
+      "x": 2684,
+      "type": "scout"
+    },
+    {
+      "x": 2841,
+      "type": "commando"
+    },
+    {
+      "x": 2999,
+      "type": "rook",
+      "y": 378
+    },
+    {
+      "x": 3156,
+      "type": "pawn",
+      "idle_pose": "lean",
+      "idle_reaction": 0.94
+    },
+    {
+      "x": 3313,
+      "type": "queen"
+    },
+    {
+      "x": 3470,
+      "type": "knight"
+    },
+    {
+      "x": 3627,
+      "type": "shield"
+    },
+    {
+      "x": 3784,
+      "type": "pawn"
+    },
+    {
+      "x": 3941,
+      "type": "grenadier"
+    },
+    {
+      "x": 4098,
+      "type": "rook",
+      "y": 318,
+      "route": "canopy_assault"
+    },
+    {
+      "x": 4255,
+      "type": "bishop"
+    },
+    {
+      "x": 4412,
+      "type": "commando",
+      "idle_pose": "rest",
+      "idle_reaction": 1.02
+    },
+    {
+      "x": 4569,
+      "type": "pawn"
+    },
+    {
+      "x": 4726,
+      "type": "knight"
+    },
+    {
+      "x": 4883,
+      "type": "scout"
+    },
+    {
+      "x": 5040,
+      "type": "pawn"
+    }
+  ],
+  "pickups": [
+    {
+      "x": 1220,
+      "y": 566,
+      "type": "machinegun"
+    },
+    {
+      "x": 2020,
+      "y": 566,
+      "type": "grenade"
+    },
+    {
+      "x": 2780,
+      "y": 566,
+      "type": "shotgun"
+    },
+    {
+      "x": 3480,
+      "y": 566,
+      "type": "medkit"
+    },
+    {
+      "x": 4060,
+      "y": 566,
+      "type": "panzerfaust"
+    },
+    {
+      "x": 4680,
+      "y": 566,
+      "type": "grenade"
+    },
+    {
+      "x": 1640,
+      "y": 231,
+      "type": "medkit",
+      "route": "climb",
+      "optional": true
+    },
+    {
+      "x": 4235,
+      "y": 236,
+      "type": "grenade",
+      "route": "canopy_assault",
+      "optional": true
+    }
+  ],
+  "boss": {
+    "x": 5270,
+    "hp": 840,
+    "width": 190,
+    "height": 150,
+    "trigger_x": 5150,
+    "arena_left": 5060,
+    "arena_right": 5480
+  },
+  "extraction": {
+    "x": 5440
+  },
+  "backdrop": {
+    "preset": "jungle_storm",
+    "seed": 71,
+    "layers": [
+      {
+        "kind": "sky",
+        "scroll": 0.025,
+        "z": -80,
+        "intensity": 1
+      },
+      {
+        "kind": "far_art",
+        "scroll": 0.055,
+        "z": -74,
+        "intensity": 1
+      },
+      {
+        "kind": "far_ridge",
+        "scroll": 0.11,
+        "z": -70,
+        "intensity": 1
+      },
+      {
+        "kind": "ruined_city",
+        "scroll": 0.29,
+        "z": -55,
+        "intensity": 1.1
+      },
+      {
+        "kind": "mid_defence",
+        "scroll": 0.57,
+        "z": -32,
+        "intensity": 1.06
+      },
+      {
+        "kind": "near_weather",
+        "scroll": 0.91,
+        "z": -8,
+        "intensity": 0.92
+      },
+      {
+        "kind": "near_foreground",
+        "scroll": 0.99,
+        "z": -4,
+        "intensity": 0.86
+      }
+    ]
+  },
+  "setpieces": [
+    {
+      "id": "ruin-lift",
+      "type": "moving_platform",
+      "x": 2750,
+      "y": 320,
+      "w": 150,
+      "h": 22,
+      "travel_x": 0,
+      "travel_y": 142,
+      "period": 4.9,
+      "phase": 0.18
+    },
+    {
+      "id": "jungle-jeep",
+      "type": "convoy",
+      "trigger_x": 1500,
+      "start_x": 2250,
+      "end_x": 1260,
+      "y": 606,
+      "w": 158,
+      "h": 68,
+      "speed": 335
+    },
+    {
+      "id": "hidden-pillbox",
+      "type": "bunker_turret",
+      "x": 4550,
+      "y": 610,
+      "w": 132,
+      "h": 84,
+      "hp": 205,
+      "trigger_x": 3970,
+      "range": 810,
+      "cooldown_min": 0.78,
+      "cooldown_max": 1.08,
+      "reaction": 0.72
+    },
+    {
+      "id": "ruin-ambush",
+      "type": "reinforcement_wave",
+      "trigger_x": 3460,
+      "reaction": 0.48,
+      "enemies": [
+        {
+          "x": 3320,
+          "type": "scout"
+        },
+        {
+          "x": 3550,
+          "type": "pawn"
+        },
+        {
+          "x": 3670,
+          "type": "commando"
+        }
+      ]
+    },
+    {
+      "id": "ruin-bridge",
+      "type": "collapse_bridge",
+      "x": 2070,
+      "y": 346,
+      "w": 190,
+      "h": 24,
+      "trigger_x": 2290,
+      "warning": 0.7,
+      "fall_gravity": 1010
+    },
+    {
+      "id": "temple-falls",
+      "type": "waterfall",
+      "x": 3890,
+      "y": 198,
+      "w": 140,
+      "h": 400
+    },
+    {
+      "id": "bamboo-blockade",
+      "type": "destructible_barricade",
+      "x": 2430,
+      "y": 548,
+      "w": 104,
+      "h": 62,
+      "hp": 92
+    },
+    {
+      "id": "rotting-walkway",
+      "type": "destructible_platform",
+      "x": 3370,
+      "y": 318,
+      "w": 180,
+      "h": 24,
+      "hp": 68
+    },
+    {
+      "id": "jungle-shelling",
+      "type": "artillery_barrage",
+      "trigger_x": 2920,
+      "min_x": 2860,
+      "max_x": 3740,
+      "salvos": 3,
+      "telegraph": 1.02,
+      "interval": 0.88,
+      "radius": 84,
+      "damage": 92,
+      "lead": 82
+    }
+  ],
+  "dressing": [
+    {
+      "kind": "crate",
+      "x": 500,
+      "y": 607,
+      "size": 30
+    },
+    {
+      "kind": "sandbags",
+      "x": 582,
+      "y": 607,
+      "count": 5
+    },
+    {
+      "kind": "crate",
+      "x": 1090,
+      "y": 607,
+      "size": 33
+    },
+    {
+      "kind": "crate",
+      "x": 1680,
+      "y": 607,
+      "size": 36
+    },
+    {
+      "kind": "sandbags",
+      "x": 1762,
+      "y": 607,
+      "count": 5
+    },
+    {
+      "kind": "crate",
+      "x": 2270,
+      "y": 607,
+      "size": 30
+    },
+    {
+      "kind": "crate",
+      "x": 2860,
+      "y": 607,
+      "size": 33
+    },
+    {
+      "kind": "sandbags",
+      "x": 2942,
+      "y": 607,
+      "count": 5
+    },
+    {
+      "kind": "crate",
+      "x": 3450,
+      "y": 607,
+      "size": 36
+    },
+    {
+      "kind": "crate",
+      "x": 4040,
+      "y": 607,
+      "size": 30
+    },
+    {
+      "kind": "sandbags",
+      "x": 4122,
+      "y": 607,
+      "count": 5
+    },
+    {
+      "kind": "crate",
+      "x": 4630,
+      "y": 607,
+      "size": 33
+    },
+    {
+      "kind": "crate",
+      "x": 5220,
+      "y": 607,
+      "size": 36
+    },
+    {
+      "kind": "sandbags",
+      "x": 5302,
+      "y": 607,
+      "count": 5
+    }
+  ],
+  "story_props": [
+    {
+      "kind": "jungle_tree",
+      "x": 360,
+      "y": 610
+    },
+    {
+      "kind": "jungle_tree",
+      "x": 970,
+      "y": 610
+    },
+    {
+      "kind": "jungle_tree",
+      "x": 1580,
+      "y": 610
+    },
+    {
+      "kind": "jungle_tree",
+      "x": 2190,
+      "y": 610
+    },
+    {
+      "kind": "jungle_tree",
+      "x": 2800,
+      "y": 610
+    },
+    {
+      "kind": "jungle_tree",
+      "x": 3410,
+      "y": 610
+    },
+    {
+      "kind": "jungle_tree",
+      "x": 4020,
+      "y": 610
+    },
+    {
+      "kind": "jungle_tree",
+      "x": 4630,
+      "y": 610
+    },
+    {
+      "kind": "jungle_tree",
+      "x": 5240,
+      "y": 610
+    },
+    {
+      "kind": "fallen_trunk",
+      "x": 840,
+      "y": 606
+    },
+    {
+      "kind": "fallen_trunk",
+      "x": 1660,
+      "y": 606
+    },
+    {
+      "kind": "fallen_trunk",
+      "x": 2480,
+      "y": 606
+    },
+    {
+      "kind": "fallen_trunk",
+      "x": 3300,
+      "y": 606
+    },
+    {
+      "kind": "fallen_trunk",
+      "x": 4120,
+      "y": 606
+    },
+    {
+      "kind": "fallen_trunk",
+      "x": 4940,
+      "y": 606
+    },
+    {
+      "kind": "jungle_hut",
+      "x": 1180,
+      "y": 610
+    },
+    {
+      "kind": "jungle_hut",
+      "x": 2100,
+      "y": 610
+    },
+    {
+      "kind": "jungle_hut",
+      "x": 3020,
+      "y": 610
+    },
+    {
+      "kind": "jungle_hut",
+      "x": 3940,
+      "y": 610
+    },
+    {
+      "kind": "jungle_hut",
+      "x": 4860,
+      "y": 610
+    },
+    {
+      "kind": "jungle_fern_cluster",
+      "x": 500,
+      "y": 609,
+      "scale": 1
+    },
+    {
+      "kind": "jungle_ruin_pillar",
+      "x": 710,
+      "y": 610,
+      "w": 46,
+      "h": 96
+    },
+    {
+      "kind": "jungle_brazier",
+      "x": 1010,
+      "y": 608,
+      "scale": 0.92
+    },
+    {
+      "kind": "jungle_fern_cluster",
+      "x": 1120,
+      "y": 609,
+      "scale": 1.18
+    },
+    {
+      "kind": "jungle_ruin_pillar",
+      "x": 1510,
+      "y": 610,
+      "w": 52,
+      "h": 118
+    },
+    {
+      "kind": "jungle_fern_cluster",
+      "x": 1810,
+      "y": 609,
+      "scale": 0.92
+    },
+    {
+      "kind": "jungle_brazier",
+      "x": 2230,
+      "y": 608,
+      "scale": 1
+    },
+    {
+      "kind": "jungle_ruin_pillar",
+      "x": 2720,
+      "y": 610,
+      "w": 58,
+      "h": 126
+    },
+    {
+      "kind": "jungle_fern_cluster",
+      "x": 3050,
+      "y": 609,
+      "scale": 1.12
+    },
+    {
+      "kind": "jungle_brazier",
+      "x": 3760,
+      "y": 608,
+      "scale": 0.9
+    },
+    {
+      "kind": "jungle_ruin_pillar",
+      "x": 4140,
+      "y": 610,
+      "w": 50,
+      "h": 104
+    },
+    {
+      "kind": "jungle_fern_cluster",
+      "x": 4630,
+      "y": 609,
+      "scale": 1.2
+    }
+  ],
+  "visual_revision": 4,
+  "ladders": [
+    {
+      "x": 1552,
+      "top_y": 275,
+      "bottom_y": 610,
+      "w": 30,
+      "exit_dir": 1,
+      "kind": "vine_ladder"
+    },
+    {
+      "x": 4022,
+      "top_y": 318,
+      "bottom_y": 404,
+      "w": 30,
+      "exit_dir": 1,
+      "kind": "relay_ladder"
+    }
+  ],
+  "pits": [
+    {
+      "x": 1890,
+      "w": 200,
+      "kind": "ravine"
+    },
+    {
+      "x": 3920,
+      "w": 200,
+      "kind": "washed_out_ground"
+    }
+  ]
+}

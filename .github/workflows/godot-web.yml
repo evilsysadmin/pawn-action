@@ -1,0 +1,183 @@
+name: Pawn Action · Godot / Web CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pawn-action-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: '4.7.2'
+  GODOT_RELEASE: '4.7.2-stable'
+  GODOT_TEMPLATE_VERSION: '4.7.2.stable'
+  GODOT_EDITOR_SHA256: 'cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4'
+  GODOT_TEMPLATES_SHA256: 'f298490b8d44d934be425a5a65a51bf15f422428b229a06a6e11d9ffea248011'
+
+jobs:
+  godot:
+    name: Godot · gates, gameplay, 4 stages and Web export
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - name: Python syntax and source contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q scripts
+          python3 -S scripts/pawn_slug_godot_2d_gate.py self-test
+          python3 -S scripts/pawn_slug_godot_2d_gate.py
+          python3 -S scripts/pawn_slug_enemy_roster_gate.py self-test
+          python3 -S scripts/pawn_slug_enemy_roster_gate.py
+      - name: Web release manifest and sprite pipeline self-tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -S scripts/pawn_slug_godot_bundle.py self-test
+          python3 -m pip install --disable-pip-version-check --no-deps --only-binary=:all: 'Pillow==13.0.0'
+          python3 scripts/art/test_sprite_forge.py
+          python3 -m unittest discover -s tests -p 'test_pawn_action_visual_review.py' -v
+          python3 -m unittest discover -s tests -p 'test_pawn_action_matched_jump_frames.py' -v
+          python3 -m unittest discover -s tests -p 'test_pawn_action_legacy_motion_review.py' -v
+          python3 scripts/art/sprite_forge_acceptance.py --self-test
+      - name: Install pinned Godot 4.7.2 editor
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ".godot-ci/$GODOT_VERSION"
+          archive="$RUNNER_TEMP/godot-editor.zip"
+          curl -fL --retry 3             "https://github.com/godotengine/godot-builds/releases/download/$GODOT_RELEASE/Godot_v${GODOT_RELEASE}_linux.x86_64.zip"             -o "$archive"
+          echo "$GODOT_EDITOR_SHA256  $archive" | sha256sum -c -
+          unzip -q "$archive" -d ".godot-ci/$GODOT_VERSION"
+          mv ".godot-ci/$GODOT_VERSION/Godot_v${GODOT_RELEASE}_linux.x86_64" ".godot-ci/$GODOT_VERSION/godot"
+          chmod +x ".godot-ci/$GODOT_VERSION/godot"
+          ".godot-ci/$GODOT_VERSION/godot" --version
+      - name: Parse the real Godot project
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot="$GITHUB_WORKSPACE/.godot-ci/$GODOT_VERSION/godot"
+          "$godot" --headless --path games/pawn-slug-godot --editor --quit 2>&1 | tee "$RUNNER_TEMP/godot-parse.log"
+          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|Parse Error:' "$RUNNER_TEMP/godot-parse.log"
+      - name: Player mechanics and enemy atlas smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot="$GITHUB_WORKSPACE/.godot-ci/$GODOT_VERSION/godot"
+          "$godot" --headless --path games/pawn-slug-godot --script res://tests/player_runtime_smoke.gd
+          "$godot" --headless --path games/pawn-slug-godot --script res://tests/matthias_atlas_recovery_smoke.gd
+          "$godot" --headless --path games/pawn-slug-godot --script res://tests/enemy_initial_v4_atlas_smoke.gd
+      - name: All four campaign stages remain traversable
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot="$GITHUB_WORKSPACE/.godot-ci/$GODOT_VERSION/godot"
+          for stage in industrial_front_v1 harbor_raid_v1 alpine_fortress_v1 jungle_relay_v1; do
+            PAWN_SLUG_STAGE="$stage" timeout 300 "$godot" --headless --fixed-fps 60               --path games/pawn-slug-godot --script res://tests/traversal_audit.gd
+          done
+      - name: Install pinned Godot Web templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/godot-templates.tpz"
+          curl -fL --retry 3             "https://github.com/godotengine/godot-builds/releases/download/$GODOT_RELEASE/Godot_v${GODOT_RELEASE}_export_templates.tpz"             -o "$archive"
+          echo "$GODOT_TEMPLATES_SHA256  $archive" | sha256sum -c -
+          template_dir="$HOME/.local/share/godot/export_templates/$GODOT_TEMPLATE_VERSION"
+          mkdir -p "$template_dir" "$RUNNER_TEMP/godot-templates"
+          unzip -q "$archive" templates/web_nothreads_debug.zip templates/web_nothreads_release.zip             -d "$RUNNER_TEMP/godot-templates"
+          install -m 0644 "$RUNNER_TEMP/godot-templates/templates/web_nothreads_debug.zip" "$template_dir/web_nothreads_debug.zip"
+          install -m 0644 "$RUNNER_TEMP/godot-templates/templates/web_nothreads_release.zip" "$template_dir/web_nothreads_release.zip"
+      - name: Export standalone Web build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p games/pawn-slug-godot/build/web
+          pushd games/pawn-slug-godot >/dev/null
+          "$GITHUB_WORKSPACE/.godot-ci/$GODOT_VERSION/godot" --headless --export-release Web build/web/index.html 2>&1 | tee "$RUNNER_TEMP/godot-export.log"
+          popd >/dev/null
+          ! grep -Eq 'SCRIPT ERROR:|ERROR: Failed to load script|Parse Error:' "$RUNNER_TEMP/godot-export.log"
+          for name in index.html index.js index.wasm index.pck; do
+            test -s "games/pawn-slug-godot/build/web/$name"
+          done
+      # Both PR and main-push releases must pass the same *real Chromium* gate.
+      # Infra must never accredit a main Web export without touch/lifecycle proof.
+      - name: Set up Node for real Web visual capture
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Capture real Pawn Action gameplay and mobile input in Chromium
+        shell: bash
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          node --test tests/test_pawn_action_legacy_smg_fire_probe.mjs tests/test_pawn_action_boot_diagnostics.mjs
+          npm ci --prefix e2e --ignore-scripts
+          ./e2e/node_modules/.bin/playwright install --with-deps chromium
+          python3 -m http.server 4179 --bind 127.0.0.1 --directory games/pawn-slug-godot/build/web > "$RUNNER_TEMP/pawn-action-server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in 1 2 3 4 5; do
+            if curl -fsS http://127.0.0.1:4179/index.html -o /dev/null; then break; fi
+            sleep 1
+          done
+          node --check scripts/pawn_action_web_boot_failure_smoke.mjs
+          PAWN_SLUG_CAPTURE_DIR="$GITHUB_WORKSPACE/visual-evidence" node scripts/pawn_action_web_boot_failure_smoke.mjs
+          PAWN_SLUG_CAPTURE_DIR="$GITHUB_WORKSPACE/visual-evidence" PAWN_SLUG_CAPTURE_STAGES=industrial_front_v1 node scripts/pawn_slug_godot_pr_capture.mjs
+          node --check scripts/pawn_action_web_mobile_smoke.mjs
+          PAWN_SLUG_CAPTURE_DIR="$GITHUB_WORKSPACE/visual-evidence" node scripts/pawn_action_web_mobile_smoke.mjs
+      - name: Build SHA-bound Chromium visual review packet (not visual approval)
+        shell: bash
+        env:
+          REVIEW_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/pawn_action_visual_review.py \
+            --capture-dir visual-evidence \
+            --out visual-evidence/review \
+            --source-sha "$REVIEW_SOURCE_SHA" \
+            --run-id "$GITHUB_RUN_ID"
+      # A read-only fresh Chess Studio reference, NOT an approved visual baseline.
+      # External CDN faults must not mask our own deterministic Godot/browser gates.
+      - name: Reconstruct legacy Chess Studio visual candidate (read-only)
+        if: always() && success()
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          PAWN_ACTION_LEGACY_CAPTURE_DIR: legacy-baseline-candidate
+          PAWN_ACTION_CURRENT_CAPTURE_DIR: visual-evidence
+          PAWN_ACTION_CURRENT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          node --check scripts/pawn_action_legacy_baseline_capture.mjs
+          node scripts/pawn_action_legacy_baseline_capture.mjs --self-test
+          node scripts/pawn_action_legacy_baseline_capture.mjs
+          python3 scripts/pawn_action_legacy_comparison.py \
+            --legacy-dir legacy-baseline-candidate \
+            --current-dir visual-evidence \
+            --current-sha "$PAWN_ACTION_CURRENT_SHA"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: pawn-action-legacy-visual-candidate
+          path: legacy-baseline-candidate/
+          if-no-files-found: warn
+          retention-days: 21
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: pawn-action-real-visual-evidence
+          path: visual-evidence/
+          if-no-files-found: warn
+          retention-days: 21
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pawn-action-godot-web
+          path: games/pawn-slug-godot/build/web/
+          if-no-files-found: error
+          retention-days: 5

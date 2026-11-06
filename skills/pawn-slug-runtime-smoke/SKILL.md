@@ -1,0 +1,142 @@
+# Pawn Action Godot Web runtime smoke — skill
+
+Este skill cubre export Web, bridge React↔Godot y Playwright. No cubre generación de sprites; para eso usar `skills/godot-spritesheets/SKILL.md`.
+
+## Qué debe demostrar el smoke web
+
+El smoke del navegador valida infraestructura/runtime estable:
+
+- iframe/canvas monta;
+- bridge llega a ready;
+- reload/remount funciona;
+- no hay errores fatales de página/red;
+- input real del navegador alcanza Godot;
+- eventos representativos del juego cruzan el bridge.
+
+No debe convertirse en un bot que tenga que ganar una sección del nivel, sobrevivir IA emergente o recoger un pickup concreto para declarar sano el runtime.
+
+Godot headless y tests de gameplay poseen reglas más profundas como estados/acciones deterministas; el navegador posee integración Web/lifecycle/input real.
+
+## Bootstrap de assets de Matthias
+
+El arranque de Pawn Action usa una ruta crítica mínima y un warmup posterior. El cambio de arma no debe volver a ser el mecanismo normal de carga.
+
+Contrato:
+
+- sólo el atlas completo del arma equipada al arrancar —normalmente `pistol`— puede bloquear el primer `body_ready()`;
+- en cuanto Matthias es visible, iniciar el warmup de los bancos grandes en orden de uso probable: `machinegun` primero y después `shotgun`/`panzerfaust`, de uno en uno para no convertir el primer segundo jugable en otra ráfaga de red/decodificación; después completar los overlays de locomoción activos (`run12`/`run13`) sin volver a bloquear el juego;
+- el camino normal de un pickup debe encontrar su `SpriteFrames` ya en memoria; una petición foreground al seleccionar arma existe sólo como red de seguridad si un pickup excepcionalmente temprano gana la carrera al warmup o falla el CDN;
+- **nunca mantener visible el sprite del arma anterior** mientras llega el banco de la nueva;
+- ante un fallo excepcional de CDN, ocultar el body o mostrar un estado de carga/error correcto; no disfrazar el fallo enseñando otra arma;
+- los caches estáticos pueden reutilizarse entre remounts de la misma sesión.
+
+El smoke/runtime debe proteger este contrato porque un cambio de arma con popping visual es una regresión aunque el gameplay siga funcionando.
+
+## Lo que el smoke NO demuestra
+
+Un smoke web verde **no acredita calidad visual del sprite**. En particular, no demuestra que:
+
+- una pistola no parezca dos armas;
+- el agarre a dos manos sea anatómicamente legible;
+- `idle`, `run+fire`, direccionales o `hurt` usen el frame correcto;
+- no haya jitter, cambios de escala o siluetas incoherentes entre animaciones.
+
+Esas propiedades pertenecen a `skills/godot-spritesheets/SKILL.md` y a sus artifacts visuales pose-a-pose.
+
+Cuando una PR cambia sprites runtime, el visual capture debe incluir close-ups de las animaciones modificadas y de cualquier pose con una regresión visual conocida. El smoke funcional puede seguir verde aunque esas capturas deban provocar un `REJECT` humano.
+
+## Input real y physics ticks
+
+Godot consulta muchas acciones durante physics ticks. Un `keyboard.press()` de Playwright puede hacer keydown+keyup entre dos ticks y ser invisible para el juego.
+
+Para acciones muestreadas por estado:
+
+- usar key down;
+- mantenerla el tiempo suficiente para cruzar al menos un physics frame real;
+- key up después.
+
+El contrato actual usa pulsos sostenidos para fuego/granada y un hold mayor para salto de altura completa. No reducir esos holds a taps instantáneos sin demostrar que el código Godot cambió a eventos edge-triggered.
+
+El salto es variable: soltar pronto recorta la velocidad vertical. Un smoke que necesita un salto completo debe mantener la tecla; no tratar un mini-hop como fallo del nivel.
+
+## Determinismo
+
+Preferir una ruta corta y controlada.
+
+- No depender de la IA para colocarse exactamente.
+- No exigir matar enemigos/pickups si el objetivo es probar bridge/input.
+- Si se usa geometría del nivel, escoger un tramo estable y documentado.
+- Mantener las aserciones en eventos reales (`player-fired`, `grenade-thrown`, etc.), no en helpers falsos de test.
+- El smoke puede simplificarse cuando el escenario evoluciona, siempre que siga probando la frontera Web real.
+
+## Traversal de escenarios
+
+Cualquier cambio de geometría (`maps/*.json`: plataformas, obstáculos, fosos) debe pasar dos gates:
+
+- **Estático** (`scripts/pawn_slug_enemy_roster_gate.py`): ningún obstáculo con un sólido encima a menos de 84 px (cuerpo de pie), ningún obstáculo dentro de un foso ni a menos de 120 px antes de él, fosos ≤ 200 px y ningún sólido tapando el arco del salto sobre un foso (si hace falta pasarela encima, `one_way: true`).
+- **Bot headless** (`tests/traversal_audit.gd`): recorre cada stage con teclas reales, sin enemigos e invulnerable, y falla si se atasca o no llega al boss.
+
+```
+PAWN_SLUG_STAGE=jungle_relay_v1 godot --headless --fixed-fps 60 --path games/pawn-slug-godot --script res://tests/traversal_audit.gd
+```
+
+Sin `--fixed-fps 60` el headless corre en tiempo real (~10× más lento).
+
+## Recuperación de un atlas crítico
+
+Las solicitudes `HTTPRequest` de bancos estrictos, fondos de warmup,
+foreground excepcional y master de emergencia tienen un límite de 75 segundos
+**por intento**; el valor predeterminado de Godot era 0 (espera indefinida).
+Un fallo de red/timeout debe atravesar las mismas rutas de reintento y
+fallback existentes: jamás se acredita `body_ready()` ni se reutiliza el
+sprite del arma anterior mientras no haya un banco válido.
+
+`tests/matthias_atlas_recovery_smoke.gd` reproduce sin CDN el pickup de
+SMG mientras su descarga de fondo sigue activa, su agotamiento y la
+reactivación de una solicitud foreground; verifica que se conserva el
+arma nueva y que solo el banco correcto devuelve el estado jugable.
+
+Si **todos** los orígenes (strict, fallback y master) están inaccesibles,
+el sistema no puede inventar un sprite; el error sigue siendo de assets y
+requiere diagnóstico/UX explícita en una futura iteración. Esta prueba
+no acredita que Chess Studio legado —un export Web inmutable— se haya
+corregido por sí mismo.
+
+## Readiness
+
+Las descargas no críticas ya no retienen el único slot foreground durante un
+cambio de arma: si el banco nuevo no está listo, el cambio cancela una petición
+foreground de otro arma, desconecta su callback y concede el slot al
+seleccionado. Si una petición secundaria termina por error o por éxito durante
+un cambio de arma, su callback vuelve a comprobar `body_ready()` y reanuda
+el banco que realmente está equipado. No se muestra el sprite del arma anterior
+ni se concede `body_ready()` por una pulsación o evento artificial.
+
+La CI reproduce ambas carreras sin red, con request antiguo activo, fallo de
+overlay opcional y un solo nuevo request del banco completo correcto.
+
+Los assets canónicos pueden introducir varianza de cold boot. Usar el timeout versionado del propio test/workflow y calibrarlo con evidencia de runner; actualmente el bridge contempla una ventana de arranque fría más amplia que un boot local caliente.
+
+No esconder un deadlock aumentando timeouts repetidamente. Distinguir:
+
+- asset/network todavía cargando;
+- Godot ejecutando pero bridge no ready;
+- canvas no montado;
+- excepción de página;
+- evento de input perdido.
+
+## PR / exact head
+
+Los required checks deben ejecutar contra el head actual de la PR. Si una PR reemplaza otra o avanza su head, no considerar evidencia de un run del SHA anterior como acreditación del nuevo.
+
+## Acceptance
+
+Un cambio de runtime/smoke está listo cuando:
+
+- export/boot real funciona;
+- ready bridge aparece dentro del presupuesto;
+- movimiento y al menos acciones representativas llegan mediante teclado real;
+- lifecycle/reload/remount permanece sano;
+- no se depende de una victoria emergente del nivel;
+- Godot headless conserva su cobertura propia;
+- CI acredita el SHA actual.
