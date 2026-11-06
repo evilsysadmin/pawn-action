@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -51,6 +51,61 @@
       padding-top: 10px;
     }
 
+    /* Accessible recovery only when the Godot Web engine actually fails. */
+    #boot.is-error {
+      z-index: 5;
+      pointer-events: auto;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    #boot.is-error #boot-title {
+      display: none;
+    }
+
+    #boot-error {
+      max-width: 440px;
+      display: grid;
+      justify-items: center;
+      gap: 16px;
+      text-align: center;
+      letter-spacing: normal;
+    }
+
+    #boot-error[hidden] {
+      display: none;
+    }
+
+    #boot-error strong {
+      color: #e7dabb;
+      font: 700 clamp(21px, 4vw, 30px)/1.2 system-ui, sans-serif;
+    }
+
+    #boot-error p {
+      margin: 0;
+      color: #c3b99f;
+      font: 400 15px/1.5 system-ui, sans-serif;
+    }
+
+    #boot-retry {
+      border: 1px solid #b99a5b;
+      border-radius: 8px;
+      padding: 12px 28px;
+      background: #302a22;
+      color: #f5e6c6;
+      font: 600 15px/1.2 system-ui, sans-serif;
+      cursor: pointer;
+    }
+
+    #boot-retry:hover {
+      background: #423727;
+    }
+
+    #boot-retry:focus-visible {
+      outline: 2px solid #e7dabb;
+      outline-offset: 4px;
+    }
+
     #rotate-notice {
       position: fixed;
       inset: 0;
@@ -85,7 +140,14 @@
 </head>
 <body>
   <canvas id="canvas" tabindex="0" aria-label="$GODOT_PROJECT_NAME"></canvas>
-  <div id="boot" aria-hidden="true"><span>PAWN ACTION</span></div>
+  <div id="boot" aria-hidden="true">
+    <span id="boot-title">PAWN ACTION</span>
+    <div id="boot-error" role="alert" hidden>
+      <strong>No se ha podido iniciar Pawn Action</strong>
+      <p>No se han cargado los recursos del juego. Comprueba la conexión y vuelve a intentarlo.</p>
+      <button id="boot-retry" type="button">Reintentar</button>
+    </div>
+  </div>
   <div id="rotate-notice" role="status" aria-live="polite">
     <strong>GIRA EL MÓVIL</strong>
     <span>Pawn Action se juega en horizontal.</span>
@@ -95,6 +157,10 @@
     (() => {
       const canvas = document.getElementById("canvas");
       const boot = document.getElementById("boot");
+      const bootError = document.getElementById("boot-error");
+      const retryButton = document.getElementById("boot-retry");
+      let bootFailed = false;
+      retryButton?.addEventListener("click", () => window.location.reload());
       const isTouchDevice = () => Boolean(
         (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
         navigator.maxTouchPoints > 0
@@ -112,28 +178,45 @@
       window.addEventListener('orientationchange', syncOrientation);
       syncOrientation();
       window.__pawnSlugGodotVisualReady = () => {
+        if (bootFailed) return;
         canvas.classList.add("is-ready");
         if (boot) boot.classList.add("is-hidden");
         window.setTimeout(() => boot?.remove(), 120);
       };
-      const engine = new Engine($GODOT_CONFIG);
-      engine.startGame({ canvas })
-        .then(() => {
-          try {
-            canvas.focus({ preventScroll: true });
-          } catch (_) {
-            canvas.focus();
-          }
-        })
-        .catch((error) => {
-          console.error("Pawn Action Godot failed to start", error);
-          try {
-            window.parent.postMessage(
-              { source: "pawn-slug-godot", type: "load-error" },
-              "*"
-            );
-          } catch (_) {}
-        });
+      const showBootFailure = (error) => {
+        if (bootFailed || canvas.classList.contains("is-ready")) return;
+        bootFailed = true;
+        console.error("Pawn Action Godot failed to start", error);
+        // The button is never available while a game is playable. A retry is
+        // strictly user-initiated; no reload can discard a live game session.
+        canvas.style.pointerEvents = "none";
+        boot?.classList.add("is-error");
+        boot?.removeAttribute("aria-hidden");
+        if (bootError) bootError.hidden = false;
+        retryButton?.focus();
+        try {
+          window.parent.postMessage(
+            { source: "pawn-slug-godot", type: "load-error" },
+            "*"
+          );
+        } catch (_) {}
+      };
+      try {
+        const engine = new Engine($GODOT_CONFIG);
+        Promise.resolve(engine.startGame({ canvas }))
+          .then(() => {
+            if (bootFailed) return;
+            try {
+              canvas.focus({ preventScroll: true });
+            } catch (_) {
+              canvas.focus();
+            }
+          })
+          .catch(showBootFailure);
+      } catch (error) {
+        // Also handle missing/invalid Engine JS and synchronous exceptions.
+        showBootFailure(error);
+      }
     })();
   </script>
 </body>

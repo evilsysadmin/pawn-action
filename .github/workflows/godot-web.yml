@@ -127,6 +127,8 @@ jobs:
             if curl -fsS http://127.0.0.1:4179/index.html -o /dev/null; then break; fi
             sleep 1
           done
+          node --check scripts/pawn_action_web_boot_failure_smoke.mjs
+          PAWN_SLUG_CAPTURE_DIR="$GITHUB_WORKSPACE/visual-evidence" node scripts/pawn_action_web_boot_failure_smoke.mjs
           PAWN_SLUG_CAPTURE_DIR="$GITHUB_WORKSPACE/visual-evidence" PAWN_SLUG_CAPTURE_STAGES=industrial_front_v1 node scripts/pawn_slug_godot_pr_capture.mjs
           node --check scripts/pawn_action_web_mobile_smoke.mjs
           PAWN_SLUG_CAPTURE_DIR="$GITHUB_WORKSPACE/visual-evidence" node scripts/pawn_action_web_mobile_smoke.mjs
