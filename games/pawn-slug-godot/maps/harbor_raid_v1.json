@@ -1,0 +1,932 @@
+{
+  "id": "harbor_raid_v1",
+  "version": 2,
+  "theme": "harbor_dusk",
+  "world": {
+    "width": 5600,
+    "height": 720,
+    "floor_y": 610,
+    "start_x": 110,
+    "floor_depth": 110,
+    "boundary_thickness": 40
+  },
+  "checkpoints": [
+    110,
+    1620,
+    3220,
+    4540
+  ],
+  "platforms": [
+    {
+      "x": 420,
+      "y": 520,
+      "w": 180,
+      "h": 24,
+      "kind": "low_dock",
+      "material": "wood"
+    },
+    {
+      "x": 520,
+      "y": 344,
+      "w": 132,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "metal",
+      "one_way": true,
+      "visual": {
+        "rail": true,
+        "lamp": true
+      }
+    },
+    {
+      "x": 650,
+      "y": 466,
+      "w": 150,
+      "h": 24,
+      "kind": "dock",
+      "material": "concrete",
+      "visual": {
+        "lamp": true
+      }
+    },
+    {
+      "x": 860,
+      "y": 396,
+      "w": 220,
+      "h": 24,
+      "kind": "crane_walk",
+      "material": "metal",
+      "visual": {
+        "rail": true
+      }
+    },
+    {
+      "x": 1140,
+      "y": 520,
+      "w": 210,
+      "h": 24,
+      "kind": "low_dock",
+      "material": "wood"
+    },
+    {
+      "x": 1410,
+      "y": 448,
+      "w": 160,
+      "h": 24,
+      "kind": "dock",
+      "material": "concrete"
+    },
+    {
+      "x": 1540,
+      "y": 316,
+      "w": 138,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "metal",
+      "one_way": true,
+      "visual": {
+        "rail": true
+      }
+    },
+    {
+      "x": 1680,
+      "y": 378,
+      "w": 210,
+      "h": 24,
+      "kind": "crane_walk",
+      "material": "metal",
+      "visual": {
+        "rail": true,
+        "lamp": true
+      },
+      "one_way": true
+    },
+    {
+      "x": 1960,
+      "y": 488,
+      "w": 190,
+      "h": 24,
+      "kind": "dock",
+      "material": "wood",
+      "one_way": true
+    },
+    {
+      "x": 2045,
+      "y": 392,
+      "w": 122,
+      "h": 20,
+      "kind": "mooring_step",
+      "material": "wood",
+      "one_way": true,
+      "route": "water_bypass"
+    },
+    {
+      "x": 2188,
+      "y": 334,
+      "w": 112,
+      "h": 20,
+      "kind": "crane_step",
+      "material": "metal",
+      "one_way": true,
+      "route": "water_bypass"
+    },
+    {
+      "x": 2210,
+      "y": 430,
+      "w": 140,
+      "h": 24,
+      "kind": "dock",
+      "material": "metal"
+    },
+    {
+      "x": 2420,
+      "y": 520,
+      "w": 190,
+      "h": 24,
+      "kind": "low_dock",
+      "material": "concrete"
+    },
+    {
+      "x": 2680,
+      "y": 452,
+      "w": 220,
+      "h": 24,
+      "kind": "dock",
+      "material": "wood",
+      "route": "climb"
+    },
+    {
+      "x": 2760,
+      "y": 365,
+      "w": 145,
+      "h": 24,
+      "kind": "climb_dock",
+      "material": "wood",
+      "route": "climb"
+    },
+    {
+      "x": 2860,
+      "y": 280,
+      "w": 155,
+      "h": 24,
+      "kind": "crane_perch",
+      "material": "metal",
+      "route": "climb"
+    },
+    {
+      "x": 2960,
+      "y": 372,
+      "w": 190,
+      "h": 24,
+      "kind": "crane_walk",
+      "material": "metal",
+      "visual": {
+        "rail": true
+      }
+    },
+    {
+      "x": 2990,
+      "y": 330,
+      "w": 150,
+      "h": 24,
+      "kind": "climb_dock",
+      "material": "wood",
+      "route": "climb"
+    },
+    {
+      "x": 3230,
+      "y": 500,
+      "w": 170,
+      "h": 24,
+      "kind": "dock",
+      "material": "concrete",
+      "visual": {
+        "sandbags": 5
+      }
+    },
+    {
+      "x": 3370,
+      "y": 330,
+      "w": 136,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "concrete",
+      "one_way": true,
+      "visual": {
+        "rail": true,
+        "lamp": true
+      }
+    },
+    {
+      "x": 3470,
+      "y": 438,
+      "w": 150,
+      "h": 24,
+      "kind": "dock",
+      "material": "metal"
+    },
+    {
+      "x": 3700,
+      "y": 520,
+      "w": 210,
+      "h": 24,
+      "kind": "low_dock",
+      "material": "wood"
+    },
+    {
+      "x": 3980,
+      "y": 404,
+      "w": 240,
+      "h": 24,
+      "kind": "crane_walk",
+      "material": "metal",
+      "one_way": true,
+      "route": "crane_assault",
+      "visual": {
+        "rail": true,
+        "lamp": true,
+        "sandbags": 5
+      }
+    },
+    {
+      "x": 4060,
+      "y": 318,
+      "w": 165,
+      "h": 24,
+      "kind": "crane_perch",
+      "material": "metal",
+      "route": "crane_assault",
+      "one_way": true
+    },
+    {
+      "x": 4190,
+      "y": 240,
+      "w": 170,
+      "h": 24,
+      "kind": "crane_perch",
+      "material": "metal",
+      "route": "crane_assault",
+      "one_way": true
+    },
+    {
+      "x": 4300,
+      "y": 474,
+      "w": 170,
+      "h": 24,
+      "kind": "dock",
+      "material": "concrete"
+    },
+    {
+      "x": 4340,
+      "y": 318,
+      "w": 170,
+      "h": 24,
+      "kind": "crane_perch",
+      "material": "metal",
+      "route": "crane_assault",
+      "one_way": true
+    },
+    {
+      "x": 4470,
+      "y": 404,
+      "w": 180,
+      "h": 24,
+      "kind": "crane_walk",
+      "material": "metal",
+      "route": "crane_assault",
+      "one_way": true
+    },
+    {
+      "x": 4530,
+      "y": 520,
+      "w": 190,
+      "h": 24,
+      "kind": "low_dock",
+      "material": "wood"
+    },
+    {
+      "x": 4800,
+      "y": 390,
+      "w": 240,
+      "h": 24,
+      "kind": "crane_walk",
+      "material": "metal",
+      "visual": {
+        "rail": true
+      }
+    },
+    {
+      "x": 4940,
+      "y": 312,
+      "w": 142,
+      "h": 20,
+      "kind": "service_ledge",
+      "material": "metal",
+      "one_way": true,
+      "visual": {
+        "rail": true
+      }
+    },
+    {
+      "x": 5120,
+      "y": 456,
+      "w": 220,
+      "h": 24,
+      "kind": "dock",
+      "material": "concrete"
+    }
+  ],
+  "obstacles": [
+    {
+      "x": 900,
+      "y": 550,
+      "w": 84,
+      "h": 60,
+      "kind": "cargo_crates"
+    },
+    {
+      "x": 1280,
+      "y": 532,
+      "w": 64,
+      "h": 78,
+      "kind": "container_stack"
+    },
+    {
+      "x": 1638,
+      "y": 548,
+      "w": 92,
+      "h": 62,
+      "kind": "bollards"
+    },
+    {
+      "x": 2330,
+      "y": 540,
+      "w": 58,
+      "h": 70,
+      "kind": "barrels"
+    },
+    {
+      "x": 3090,
+      "y": 530,
+      "w": 96,
+      "h": 80,
+      "kind": "container_stack"
+    },
+    {
+      "x": 3570,
+      "y": 548,
+      "w": 88,
+      "h": 62,
+      "kind": "cargo_crates"
+    },
+    {
+      "x": 4690,
+      "y": 526,
+      "w": 92,
+      "h": 84,
+      "kind": "container_stack"
+    },
+    {
+      "x": 5010,
+      "y": 550,
+      "w": 86,
+      "h": 60,
+      "kind": "cargo_crates"
+    }
+  ],
+  "enemies": [
+    {
+      "x": 820,
+      "type": "pawn"
+    },
+    {
+      "x": 977,
+      "type": "scout"
+    },
+    {
+      "x": 1133,
+      "type": "pawn"
+    },
+    {
+      "x": 1290,
+      "type": "knight"
+    },
+    {
+      "x": 1447,
+      "type": "commando"
+    },
+    {
+      "x": 1520,
+      "type": "rook",
+      "y": 448
+    },
+    {
+      "x": 1760,
+      "type": "pawn"
+    },
+    {
+      "x": 1917,
+      "type": "shield"
+    },
+    {
+      "x": 2073,
+      "type": "grenadier"
+    },
+    {
+      "x": 2230,
+      "type": "knight",
+      "idle_pose": "sit",
+      "idle_reaction": 0.86
+    },
+    {
+      "x": 2387,
+      "type": "bishop"
+    },
+    {
+      "x": 2543,
+      "type": "pawn"
+    },
+    {
+      "x": 2700,
+      "type": "scout"
+    },
+    {
+      "x": 2857,
+      "type": "commando"
+    },
+    {
+      "x": 2940,
+      "type": "rook",
+      "y": 280,
+      "route": "climb"
+    },
+    {
+      "x": 3170,
+      "type": "pawn",
+      "idle_pose": "lean",
+      "idle_reaction": 0.94
+    },
+    {
+      "x": 3327,
+      "type": "queen"
+    },
+    {
+      "x": 3483,
+      "type": "knight"
+    },
+    {
+      "x": 3640,
+      "type": "shield"
+    },
+    {
+      "x": 3797,
+      "type": "pawn"
+    },
+    {
+      "x": 3953,
+      "type": "grenadier"
+    },
+    {
+      "x": 4110,
+      "type": "rook",
+      "y": 318,
+      "route": "crane_assault"
+    },
+    {
+      "x": 4267,
+      "type": "bishop"
+    },
+    {
+      "x": 4423,
+      "type": "commando",
+      "idle_pose": "rest",
+      "idle_reaction": 1.02
+    },
+    {
+      "x": 4580,
+      "type": "pawn"
+    },
+    {
+      "x": 4737,
+      "type": "knight"
+    },
+    {
+      "x": 4893,
+      "type": "scout"
+    },
+    {
+      "x": 5050,
+      "type": "pawn"
+    }
+  ],
+  "pickups": [
+    {
+      "x": 1260,
+      "y": 566,
+      "type": "machinegun"
+    },
+    {
+      "x": 2060,
+      "y": 566,
+      "type": "grenade"
+    },
+    {
+      "x": 2860,
+      "y": 566,
+      "type": "shotgun"
+    },
+    {
+      "x": 3520,
+      "y": 566,
+      "type": "medkit"
+    },
+    {
+      "x": 4070,
+      "y": 566,
+      "type": "panzerfaust"
+    },
+    {
+      "x": 4410,
+      "y": 274,
+      "type": "grenade",
+      "route": "crane_assault",
+      "optional": true
+    },
+    {
+      "x": 2930,
+      "y": 236,
+      "type": "medkit",
+      "route": "climb",
+      "optional": true
+    }
+  ],
+  "boss": {
+    "x": 5350,
+    "hp": 820,
+    "width": 190,
+    "height": 150,
+    "trigger_x": 5150,
+    "arena_left": 5200,
+    "arena_right": 5580
+  },
+  "extraction": {
+    "x": 5520
+  },
+  "backdrop": {
+    "preset": "harbor_dusk",
+    "seed": 31,
+    "layers": [
+      {
+        "kind": "sky",
+        "scroll": 0.03,
+        "z": -80,
+        "intensity": 1
+      },
+      {
+        "kind": "far_art",
+        "scroll": 0.055,
+        "z": -74,
+        "intensity": 1
+      },
+      {
+        "kind": "far_ridge",
+        "scroll": 0.12,
+        "z": -70,
+        "intensity": 1
+      },
+      {
+        "kind": "ruined_city",
+        "scroll": 0.3,
+        "z": -55,
+        "intensity": 1
+      },
+      {
+        "kind": "mid_defence",
+        "scroll": 0.58,
+        "z": -32,
+        "intensity": 1
+      },
+      {
+        "kind": "near_weather",
+        "scroll": 0.9,
+        "z": -8,
+        "intensity": 1
+      },
+      {
+        "kind": "near_foreground",
+        "scroll": 0.98,
+        "z": -4,
+        "intensity": 1
+      }
+    ]
+  },
+  "setpieces": [
+    {
+      "id": "dock-crane-lift",
+      "type": "moving_platform",
+      "x": 1850,
+      "y": 300,
+      "w": 160,
+      "h": 22,
+      "travel_x": 0,
+      "travel_y": 160,
+      "period": 5.2,
+      "phase": 0.28
+    },
+    {
+      "id": "dock-truck",
+      "type": "convoy",
+      "trigger_x": 2380,
+      "start_x": 3120,
+      "end_x": 2140,
+      "y": 606,
+      "w": 168,
+      "h": 72,
+      "speed": 350
+    },
+    {
+      "id": "harbor-pillbox",
+      "type": "bunker_turret",
+      "x": 4540,
+      "y": 610,
+      "w": 138,
+      "h": 86,
+      "hp": 220,
+      "trigger_x": 3980,
+      "range": 840,
+      "cooldown_min": 0.74,
+      "cooldown_max": 1.05,
+      "reaction": 0.68
+    },
+    {
+      "id": "dock-reinforcements",
+      "type": "reinforcement_wave",
+      "trigger_x": 3440,
+      "reaction": 0.52,
+      "enemies": [
+        {
+          "x": 3320,
+          "type": "pawn"
+        },
+        {
+          "x": 3600,
+          "type": "commando"
+        },
+        {
+          "x": 3730,
+          "type": "scout"
+        }
+      ]
+    },
+    {
+      "id": "dock-bridge",
+      "type": "collapse_bridge",
+      "x": 3360,
+      "y": 350,
+      "w": 200,
+      "h": 24,
+      "trigger_x": 3590,
+      "warning": 0.68,
+      "fall_gravity": 1040
+    },
+    {
+      "id": "container-tunnel",
+      "type": "tunnel_portal",
+      "x": 3980,
+      "y": 610,
+      "w": 350,
+      "h": 210
+    },
+    {
+      "id": "cargo-wall",
+      "type": "destructible_barricade",
+      "x": 2650,
+      "y": 546,
+      "w": 104,
+      "h": 64,
+      "hp": 100
+    },
+    {
+      "id": "loading-ramp",
+      "type": "destructible_platform",
+      "x": 3650,
+      "y": 328,
+      "w": 180,
+      "h": 24,
+      "hp": 72
+    },
+    {
+      "id": "harbor-mortar",
+      "type": "artillery_barrage",
+      "trigger_x": 3050,
+      "min_x": 3000,
+      "max_x": 3920,
+      "salvos": 4,
+      "telegraph": 1,
+      "interval": 0.82,
+      "radius": 84,
+      "damage": 90,
+      "lead": 78
+    }
+  ],
+  "dressing": [
+    {
+      "kind": "crate",
+      "x": 460,
+      "y": 607,
+      "size": 34
+    },
+    {
+      "kind": "barrel",
+      "x": 524,
+      "y": 608
+    },
+    {
+      "kind": "crate",
+      "x": 1020,
+      "y": 607,
+      "size": 40
+    },
+    {
+      "kind": "barrel",
+      "x": 1084,
+      "y": 608
+    },
+    {
+      "kind": "crate",
+      "x": 1580,
+      "y": 607,
+      "size": 34
+    },
+    {
+      "kind": "barrel",
+      "x": 1644,
+      "y": 608
+    },
+    {
+      "kind": "crate",
+      "x": 2140,
+      "y": 607,
+      "size": 40
+    },
+    {
+      "kind": "barrel",
+      "x": 2204,
+      "y": 608
+    },
+    {
+      "kind": "crate",
+      "x": 2700,
+      "y": 607,
+      "size": 34
+    },
+    {
+      "kind": "barrel",
+      "x": 2764,
+      "y": 608
+    },
+    {
+      "kind": "crate",
+      "x": 3260,
+      "y": 607,
+      "size": 40
+    },
+    {
+      "kind": "barrel",
+      "x": 3324,
+      "y": 608
+    },
+    {
+      "kind": "crate",
+      "x": 3820,
+      "y": 607,
+      "size": 34
+    },
+    {
+      "kind": "barrel",
+      "x": 3884,
+      "y": 608
+    },
+    {
+      "kind": "crate",
+      "x": 4380,
+      "y": 607,
+      "size": 40
+    },
+    {
+      "kind": "barrel",
+      "x": 4444,
+      "y": 608
+    },
+    {
+      "kind": "crate",
+      "x": 4940,
+      "y": 607,
+      "size": 34
+    },
+    {
+      "kind": "barrel",
+      "x": 5004,
+      "y": 608
+    },
+    {
+      "kind": "crate",
+      "x": 5500,
+      "y": 607,
+      "size": 40
+    },
+    {
+      "kind": "barrel",
+      "x": 5564,
+      "y": 608
+    }
+  ],
+  "story_props": [
+    {
+      "kind": "harbor_lamp",
+      "x": 620,
+      "y": 610
+    },
+    {
+      "kind": "harbor_lamp",
+      "x": 1480,
+      "y": 610
+    },
+    {
+      "kind": "harbor_lamp",
+      "x": 2340,
+      "y": 610
+    },
+    {
+      "kind": "harbor_lamp",
+      "x": 3200,
+      "y": 610
+    },
+    {
+      "kind": "harbor_lamp",
+      "x": 4060,
+      "y": 610
+    },
+    {
+      "kind": "harbor_lamp",
+      "x": 4920,
+      "y": 610
+    },
+    {
+      "kind": "harbor_bollard",
+      "x": 980,
+      "y": 607
+    },
+    {
+      "kind": "harbor_bollard",
+      "x": 1920,
+      "y": 607
+    },
+    {
+      "kind": "harbor_bollard",
+      "x": 2860,
+      "y": 607
+    },
+    {
+      "kind": "harbor_bollard",
+      "x": 3800,
+      "y": 607
+    },
+    {
+      "kind": "harbor_bollard",
+      "x": 4740,
+      "y": 607
+    }
+  ],
+  "visual_revision": 4,
+  "ladders": [
+    {
+      "x": 2842,
+      "top_y": 280,
+      "bottom_y": 610,
+      "w": 30,
+      "exit_dir": 1,
+      "kind": "crane_ladder"
+    },
+    {
+      "x": 4042,
+      "top_y": 318,
+      "bottom_y": 404,
+      "w": 30,
+      "exit_dir": 1,
+      "kind": "dock_ladder"
+    }
+  ],
+  "pits": [
+    {
+      "x": 1940,
+      "w": 200,
+      "kind": "water_gap"
+    },
+    {
+      "x": 3970,
+      "w": 200,
+      "kind": "harbor_gap"
+    }
+  ]
+}

@@ -1,0 +1,2914 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+import statistics
+import sys
+from collections import deque
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Iterable
+
+from PIL import Image, ImageDraw
+
+
+@dataclass(frozen=True)
+class Component:
+    area: int
+    bbox: tuple[int, int, int, int]
+    centroid: tuple[float, float]
+
+
+@dataclass(frozen=True)
+class LintConfig:
+    alpha_threshold: int = 8
+    edge_guard_px: int = 2
+    min_detached_area: int = 4
+    allowed_detached_components: int = 0
+    reject_hidden_rgb: bool = True
+
+
+@dataclass(frozen=True)
+class LintResult:
+    ok: bool
+    errors: tuple[str, ...]
+    components: tuple[Component, ...]
+    main_component: Component | None
+    detached_components: tuple[Component, ...]
+    hidden_rgb_pixels: int
+    edge_pixels: int
+
+    def to_json(self) -> dict:
+        return {
+            "ok": self.ok,
+            "errors": list(self.errors),
+            "components": [asdict(c) for c in self.components],
+            "main_component": asdict(self.main_component) if self.main_component else None,
+            "detached_components": [asdict(c) for c in self.detached_components],
+            "hidden_rgb_pixels": self.hidden_rgb_pixels,
+            "edge_pixels": self.edge_pixels,
+        }
+
+
+def _neighbors(x: int, y: int, width: int, height: int) -> Iterable[tuple[int, int]]:
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < width and 0 <= ny < height:
+                yield nx, ny
+
+
+def connected_components(image: Image.Image, alpha_threshold: int = 8) -> list[Component]:
+    rgba = image.convert("RGBA")
+    width, height = rgba.size
+    alpha = rgba.getchannel("A")
+    alpha_data = alpha.load()
+    visited = bytearray(width * height)
+    out: list[Component] = []
+
+    for y in range(height):
+        for x in range(width):
+            idx = y * width + x
+            if visited[idx] or alpha_data[x, y] < alpha_threshold:
+                continue
+
+            queue = deque([(x, y)])
+            visited[idx] = 1
+            area = 0
+            min_x = max_x = x
+            min_y = max_y = y
+            sum_x = 0
+            sum_y = 0
+
+            while queue:
+                px, py = queue.popleft()
+                area += 1
+                min_x = min(min_x, px)
+                max_x = max(max_x, px)
+                min_y = min(min_y, py)
+                max_y = max(max_y, py)
+                sum_x += px
+                sum_y += py
+
+                for nx, ny in _neighbors(px, py, width, height):
+                    nidx = ny * width + nx
+                    if visited[nidx] or alpha_data[nx, ny] < alpha_threshold:
+                        continue
+                    visited[nidx] = 1
+                    queue.append((nx, ny))
+
+            out.append(
+                Component(
+                    area=area,
+                    bbox=(min_x, min_y, max_x + 1, max_y + 1),
+                    centroid=(sum_x / area, sum_y / area),
+                )
+            )
+
+    out.sort(key=lambda component: component.area, reverse=True)
+    return out
+
+
+def lint_frame(image: Image.Image, config: LintConfig = LintConfig()) -> LintResult:
+    rgba = image.convert("RGBA")
+    width, height = rgba.size
+    if width <= 0 or height <= 0:
+        return LintResult(False, ("empty-canvas",), (), None, (), 0, 0)
+
+    pixels = rgba.load()
+    hidden_rgb = 0
+    edge_pixels = 0
+    guard = max(0, config.edge_guard_px)
+
+    for y in range(height):
+        for x in range(width):
+            r, g, b, a = pixels[x, y]
+            if config.reject_hidden_rgb and a == 0 and (r or g or b):
+                hidden_rgb += 1
+            if a >= config.alpha_threshold and (
+                x < guard or y < guard or x >= width - guard or y >= height - guard
+            ):
+                edge_pixels += 1
+
+    components = connected_components(rgba, config.alpha_threshold)
+    main = components[0] if components else None
+    detached = tuple(
+        component
+        for component in components[1:]
+        if component.area >= config.min_detached_area
+    )
+
+    errors: list[str] = []
+    if not main:
+        errors.append("empty-frame")
+    if hidden_rgb:
+        errors.append(f"hidden-rgb:{hidden_rgb}")
+    if edge_pixels:
+        errors.append(f"edge-contact:{edge_pixels}")
+    if len(detached) > config.allowed_detached_components:
+        errors.append(
+            f"orphan-components:{len(detached)}>{config.allowed_detached_components}"
+        )
+
+    return LintResult(
+        ok=not errors,
+        errors=tuple(errors),
+        components=tuple(components),
+        main_component=main,
+        detached_components=detached,
+        hidden_rgb_pixels=hidden_rgb,
+        edge_pixels=edge_pixels,
+    )
+
+
+
+@dataclass(frozen=True)
+class PlacementContract:
+    canvas_size: tuple[int, int]
+    scale: float
+    body_center_x: float
+    foot_y: float
+    safe_margin_px: int = 8
+    foot_tolerance_px: float = 2.0
+    center_tolerance_px: float = 3.0
+
+
+@dataclass(frozen=True)
+class GeometryContract:
+    canvas_size: tuple[int, int]
+    body_height: int
+    body_center_x: float
+    foot_y: float
+    alpha_centroid_x: float
+    safe_margin_px: int = 8
+    foot_tolerance_px: float = 1.0
+    height_tolerance_px: float = 2.0
+    centroid_tolerance_px: float = 6.0
+
+
+@dataclass(frozen=True)
+class GeometryMetrics:
+    body_bbox: tuple[int, int, int, int]
+    body_height: int
+    body_center_x: float
+    foot_y: float
+    alpha_centroid_x: float
+
+
+@dataclass(frozen=True)
+class GeometryResult:
+    ok: bool
+    errors: tuple[str, ...]
+    metrics: GeometryMetrics | None
+
+
+class GeometryError(ValueError):
+    pass
+
+
+def _foreground_bbox(
+    image: Image.Image,
+    alpha_threshold: int,
+) -> tuple[int, int, int, int] | None:
+    alpha = image.convert("RGBA").getchannel("A")
+    if alpha_threshold <= 1:
+        return alpha.getbbox()
+    mask = alpha.point(lambda value: 255 if value >= alpha_threshold else 0)
+    return mask.getbbox()
+
+
+def geometry_metrics(
+    image: Image.Image,
+    alpha_threshold: int = 8,
+) -> GeometryMetrics | None:
+    components = connected_components(image, alpha_threshold)
+    if not components:
+        return None
+    body = components[0]
+    left, top, right, bottom = body.bbox
+    return GeometryMetrics(
+        body_bbox=body.bbox,
+        body_height=bottom - top,
+        body_center_x=(left + right) / 2.0,
+        foot_y=float(bottom),
+        alpha_centroid_x=body.centroid[0],
+    )
+
+
+def validate_geometry(
+    image: Image.Image,
+    contract: GeometryContract,
+    alpha_threshold: int = 8,
+) -> GeometryResult:
+    if image.size != contract.canvas_size:
+        return GeometryResult(
+            False,
+            (f"canvas:{image.size}!={contract.canvas_size}",),
+            None,
+        )
+
+    metrics = geometry_metrics(image, alpha_threshold)
+    if metrics is None:
+        return GeometryResult(False, ("empty-frame",), None)
+
+    errors: list[str] = []
+    margin = max(0, contract.safe_margin_px)
+    left, top, right, bottom = metrics.body_bbox
+    width, height = image.size
+
+    if (
+        left < margin
+        or top < margin
+        or right > width - margin
+        or bottom > height - margin
+    ):
+        errors.append(
+            f"safe-envelope:{metrics.body_bbox} outside margin={margin}"
+        )
+    if abs(metrics.foot_y - contract.foot_y) > contract.foot_tolerance_px:
+        errors.append(
+            f"foot:{metrics.foot_y:.2f}!={contract.foot_y:.2f}"
+        )
+    if (
+        abs(metrics.body_height - contract.body_height)
+        > contract.height_tolerance_px
+    ):
+        errors.append(
+            f"height:{metrics.body_height}!={contract.body_height}"
+        )
+    if (
+        abs(metrics.alpha_centroid_x - contract.alpha_centroid_x)
+        > contract.centroid_tolerance_px
+    ):
+        errors.append(
+            f"centroid-x:{metrics.alpha_centroid_x:.2f}!="
+            f"{contract.alpha_centroid_x:.2f}"
+        )
+
+    return GeometryResult(not errors, tuple(errors), metrics)
+
+
+def _clean_transparent_rgb(image: Image.Image) -> Image.Image:
+    rgba = image.convert("RGBA")
+    pixels = rgba.load()
+    width, height = rgba.size
+    for y in range(height):
+        for x in range(width):
+            r, g, b, a = pixels[x, y]
+            if a == 0 and (r or g or b):
+                pixels[x, y] = (0, 0, 0, 0)
+    return rgba
+
+
+def place_frame_fixed_scale(
+    image: Image.Image,
+    contract: PlacementContract,
+    lint_config: LintConfig = LintConfig(),
+) -> Image.Image:
+    """Place an authored pose at an explicit source-pixel scale.
+
+    Unlike normalize_frame(), this preserves the pose's canonical scale instead
+    of forcing a target body height. It is intended for horizontal/compact poses
+    such as death frames where height-based normalization would inflate width.
+    """
+    raw = image.convert("RGBA")
+    lint = lint_frame(raw, lint_config)
+    if not lint.ok or lint.main_component is None:
+        raise GeometryError("raw-lint:" + ",".join(lint.errors))
+    if contract.scale <= 0:
+        raise GeometryError("invalid-scale")
+
+    foreground = _foreground_bbox(raw, lint_config.alpha_threshold)
+    if foreground is None:
+        raise GeometryError("empty-frame")
+
+    fx0, fy0, _, _ = foreground
+    crop = raw.crop(foreground)
+    scaled_size = (
+        max(1, round(crop.width * contract.scale)),
+        max(1, round(crop.height * contract.scale)),
+    )
+    scaled = crop.resize(scaled_size, Image.Resampling.BICUBIC)
+
+    body = lint.main_component
+    body_left = (body.bbox[0] - fx0) * contract.scale
+    body_right = (body.bbox[2] - fx0) * contract.scale
+    body_bottom = (body.bbox[3] - fy0) * contract.scale
+    body_center_in_crop = (body_left + body_right) / 2.0
+
+    dest_x = round(contract.body_center_x - body_center_in_crop)
+    dest_y = round(contract.foot_y - body_bottom)
+
+    margin = max(0, contract.safe_margin_px)
+    canvas_w, canvas_h = contract.canvas_size
+    placed_bbox = (
+        dest_x,
+        dest_y,
+        dest_x + scaled.width,
+        dest_y + scaled.height,
+    )
+    if (
+        placed_bbox[0] < margin
+        or placed_bbox[1] < margin
+        or placed_bbox[2] > canvas_w - margin
+        or placed_bbox[3] > canvas_h - margin
+    ):
+        raise GeometryError(
+            f"would-clip:{placed_bbox} outside "
+            f"canvas={contract.canvas_size} margin={margin}"
+        )
+
+    out = Image.new("RGBA", contract.canvas_size, (0, 0, 0, 0))
+    out.alpha_composite(scaled, (dest_x, dest_y))
+    out = _clean_transparent_rgb(out)
+
+    post = lint_frame(out, lint_config)
+    if not post.ok:
+        raise GeometryError("post-lint:" + ",".join(post.errors))
+    metrics = geometry_metrics(out, lint_config.alpha_threshold)
+    if metrics is None:
+        raise GeometryError("empty-frame")
+    if abs(metrics.foot_y - contract.foot_y) > contract.foot_tolerance_px:
+        raise GeometryError(
+            f"foot:{metrics.foot_y:.2f}!={contract.foot_y:.2f}"
+        )
+    if abs(metrics.body_center_x - contract.body_center_x) > contract.center_tolerance_px:
+        raise GeometryError(
+            f"center:{metrics.body_center_x:.2f}!={contract.body_center_x:.2f}"
+        )
+    return out
+
+def normalize_frame(
+    image: Image.Image,
+    contract: GeometryContract,
+    lint_config: LintConfig = LintConfig(),
+) -> Image.Image:
+    raw = image.convert("RGBA")
+    lint = lint_frame(raw, lint_config)
+    if not lint.ok or lint.main_component is None:
+        raise GeometryError("raw-lint:" + ",".join(lint.errors))
+
+    foreground = _foreground_bbox(raw, lint_config.alpha_threshold)
+    if foreground is None:
+        raise GeometryError("empty-frame")
+
+    body = lint.main_component
+    body_height = body.bbox[3] - body.bbox[1]
+    if body_height <= 0:
+        raise GeometryError("invalid-body-height")
+
+    scale = contract.body_height / body_height
+    if scale <= 0:
+        raise GeometryError("invalid-scale")
+
+    fx0, fy0, _, _ = foreground
+    crop = raw.crop(foreground)
+    scaled_size = (
+        max(1, round(crop.width * scale)),
+        max(1, round(crop.height * scale)),
+    )
+    # LANCZOS rings around hard alpha silhouettes and can create detached
+    # low-alpha islands that did not exist in the authored source. BICUBIC keeps
+    # anti-aliased edges without manufacturing orphan components.
+    scaled = crop.resize(scaled_size, Image.Resampling.BICUBIC)
+
+    body_left = (body.bbox[0] - fx0) * scale
+    body_right = (body.bbox[2] - fx0) * scale
+    body_bottom = (body.bbox[3] - fy0) * scale
+    body_center_in_crop = (body_left + body_right) / 2.0
+
+    dest_x = round(contract.body_center_x - body_center_in_crop)
+    dest_y = round(contract.foot_y - body_bottom)
+
+    margin = max(0, contract.safe_margin_px)
+    canvas_w, canvas_h = contract.canvas_size
+    placed_bbox = (
+        dest_x,
+        dest_y,
+        dest_x + scaled.width,
+        dest_y + scaled.height,
+    )
+    if (
+        placed_bbox[0] < margin
+        or placed_bbox[1] < margin
+        or placed_bbox[2] > canvas_w - margin
+        or placed_bbox[3] > canvas_h - margin
+    ):
+        raise GeometryError(
+            f"would-clip:{placed_bbox} outside "
+            f"canvas={contract.canvas_size} margin={margin}"
+        )
+
+    out = Image.new("RGBA", contract.canvas_size, (0, 0, 0, 0))
+    out.alpha_composite(scaled, (dest_x, dest_y))
+    out = _clean_transparent_rgb(out)
+
+    result = validate_geometry(
+        out,
+        contract,
+        lint_config.alpha_threshold,
+    )
+    if not result.ok:
+        raise GeometryError("geometry:" + ",".join(result.errors))
+    return out
+
+
+@dataclass(frozen=True)
+class FixedScaleContract:
+    canvas_size: tuple[int, int]
+    scale: float
+    center_x: float
+    foot_y: float
+    safe_margin_px: int = 8
+
+
+def normalize_fixed_scale_frame(
+    image: Image.Image,
+    contract: FixedScaleContract,
+    lint_config: LintConfig = LintConfig(),
+) -> Image.Image:
+    raw = image.convert("RGBA")
+    lint = lint_frame(raw, lint_config)
+    if not lint.ok:
+        raise GeometryError("raw-lint:" + ",".join(lint.errors))
+    if contract.scale <= 0:
+        raise GeometryError("invalid-fixed-scale")
+
+    foreground = _foreground_bbox(raw, lint_config.alpha_threshold)
+    if foreground is None:
+        raise GeometryError("empty-frame")
+    crop = raw.crop(foreground)
+    scaled = crop.resize(
+        (
+            max(1, round(crop.width * contract.scale)),
+            max(1, round(crop.height * contract.scale)),
+        ),
+        # BICUBIC preserves the connected alpha topology of thin horizontal
+        # poses. LANCZOS ringing can create many detached sub-pixel islands
+        # even when the authored source is one connected silhouette.
+        Image.Resampling.BICUBIC,
+    )
+    dest_x = round(contract.center_x - scaled.width / 2.0)
+    dest_y = round(contract.foot_y - scaled.height)
+    placed_bbox = (
+        dest_x,
+        dest_y,
+        dest_x + scaled.width,
+        dest_y + scaled.height,
+    )
+
+    margin = max(0, contract.safe_margin_px)
+    canvas_w, canvas_h = contract.canvas_size
+    if (
+        placed_bbox[0] < margin
+        or placed_bbox[1] < margin
+        or placed_bbox[2] > canvas_w - margin
+        or placed_bbox[3] > canvas_h - margin
+    ):
+        raise GeometryError(
+            f"would-clip-fixed:{placed_bbox} outside "
+            f"canvas={contract.canvas_size} margin={margin}"
+        )
+
+    out = Image.new("RGBA", contract.canvas_size, (0, 0, 0, 0))
+    out.alpha_composite(scaled, (dest_x, dest_y))
+    out = _clean_transparent_rgb(out)
+    if _foreground_bbox(out, lint_config.alpha_threshold) is None:
+        raise GeometryError("empty-fixed-frame")
+    post_lint = lint_frame(out, lint_config)
+    if not post_lint.ok:
+        raise GeometryError("fixed-post-lint:" + ",".join(post_lint.errors))
+    return out
+
+
+@dataclass(frozen=True)
+class TemporalContract:
+    expected_frames: int
+    max_foot_delta_px: float = 6.0
+    max_centroid_delta_px: float = 10.0
+    max_height_delta_px: float = 8.0
+    max_width_delta_px: float = 16.0
+    max_area_ratio_delta: float = 0.20
+    allowed_hold_indices: tuple[int, ...] = ()
+    loop: bool = False
+
+
+@dataclass(frozen=True)
+class TemporalResult:
+    ok: bool
+    errors: tuple[str, ...]
+    frame_count: int
+    unique_frames: int
+
+
+def _body_temporal_metrics(
+    image: Image.Image,
+    alpha_threshold: int,
+) -> tuple[float, float, int, int, int] | None:
+    components = connected_components(image, alpha_threshold)
+    if not components:
+        return None
+    body = components[0]
+    left, top, right, bottom = body.bbox
+    return (
+        float(bottom),
+        float(body.centroid[0]),
+        bottom - top,
+        right - left,
+        body.area,
+    )
+
+
+def validate_sequence(
+    frames: list[Image.Image],
+    contract: TemporalContract,
+    alpha_threshold: int = 8,
+) -> TemporalResult:
+    errors: list[str] = []
+    if len(frames) != contract.expected_frames:
+        errors.append(
+            f"frame-count:{len(frames)}!={contract.expected_frames}"
+        )
+
+    rgba_frames = [frame.convert("RGBA") for frame in frames]
+    hashes = [
+        hashlib.sha256(frame.tobytes()).hexdigest()
+        for frame in rgba_frames
+    ]
+    seen: dict[str, int] = {}
+    allowed_holds = set(contract.allowed_hold_indices)
+
+    for index, digest in enumerate(hashes):
+        if digest in seen and index not in allowed_holds:
+            errors.append(f"duplicate-frame:{index}=={seen[digest]}")
+        seen.setdefault(digest, index)
+
+    metrics = [
+        _body_temporal_metrics(frame, alpha_threshold)
+        for frame in rgba_frames
+    ]
+    for index, metric in enumerate(metrics):
+        if metric is None:
+            errors.append(f"empty-frame:{index}")
+
+    pairs = [
+        (index - 1, index)
+        for index in range(1, len(frames))
+    ]
+    if contract.loop and len(frames) > 1:
+        pairs.append((len(frames) - 1, 0))
+
+    for left_index, right_index in pairs:
+        left = metrics[left_index]
+        right = metrics[right_index]
+        if left is None or right is None:
+            continue
+
+        (
+            left_foot,
+            left_centroid,
+            left_height,
+            left_width,
+            left_area,
+        ) = left
+        (
+            right_foot,
+            right_centroid,
+            right_height,
+            right_width,
+            right_area,
+        ) = right
+        label = f"{left_index}->{right_index}"
+
+        if abs(right_foot - left_foot) > contract.max_foot_delta_px:
+            errors.append(
+                f"foot-jump:{label}:"
+                f"{abs(right_foot-left_foot):.2f}"
+            )
+        if (
+            abs(right_centroid - left_centroid)
+            > contract.max_centroid_delta_px
+        ):
+            errors.append(
+                f"centroid-jump:{label}:"
+                f"{abs(right_centroid-left_centroid):.2f}"
+            )
+        if (
+            abs(right_height - left_height)
+            > contract.max_height_delta_px
+        ):
+            errors.append(
+                f"height-jump:{label}:"
+                f"{abs(right_height-left_height)}"
+            )
+        if abs(right_width - left_width) > contract.max_width_delta_px:
+            errors.append(
+                f"width-jump:{label}:"
+                f"{abs(right_width-left_width)}"
+            )
+
+        area_delta = abs(right_area - left_area) / max(
+            1,
+            max(right_area, left_area),
+        )
+        if area_delta > contract.max_area_ratio_delta:
+            errors.append(
+                f"area-jump:{label}:{area_delta:.4f}"
+            )
+
+    return TemporalResult(
+        ok=not errors,
+        errors=tuple(errors),
+        frame_count=len(frames),
+        unique_frames=len(set(hashes)),
+    )
+
+
+@dataclass(frozen=True)
+class SocketQualityContract:
+    min_hand_separation_px: float = 6.0
+    max_hand_separation_px: float = 72.0
+    max_hand_to_anchor_px: float = 44.0
+    min_muzzle_forward_px: float = 12.0
+    max_anchor_delta_px: float = 10.0
+    max_angle_delta_degrees: float = 10.0
+    max_scale_delta: float = 0.15
+
+
+@dataclass(frozen=True)
+class SocketQualityResult:
+    ok: bool
+    errors: tuple[str, ...]
+
+
+def _point_distance(left: list[float], right: list[float]) -> float:
+    return math.hypot(float(right[0]) - float(left[0]), float(right[1]) - float(left[1]))
+
+
+def _angle_delta(left: float, right: float) -> float:
+    delta = (float(right) - float(left) + 180.0) % 360.0 - 180.0
+    return abs(delta)
+
+
+def validate_socket_sequence(
+    sockets: list[dict],
+    contract: SocketQualityContract = SocketQualityContract(),
+    *,
+    loop: bool = False,
+) -> SocketQualityResult:
+    errors: list[str] = []
+    if not sockets:
+        return SocketQualityResult(False, ("socket-sequence-empty",))
+
+    for index, socket in enumerate(sockets):
+        anchor = socket["weapon_anchor"]
+        rear = socket["rear_hand"]
+        front = socket["front_hand"]
+        muzzle = socket["muzzle"]
+
+        hand_span = _point_distance(rear, front)
+        if hand_span < contract.min_hand_separation_px:
+            errors.append(f"hand-span-too-small:{index}:{hand_span:.2f}")
+        if hand_span > contract.max_hand_separation_px:
+            errors.append(f"hand-span-too-large:{index}:{hand_span:.2f}")
+
+        rear_distance = _point_distance(rear, anchor)
+        front_distance = _point_distance(front, anchor)
+        if rear_distance > contract.max_hand_to_anchor_px:
+            errors.append(f"rear-hand-detached:{index}:{rear_distance:.2f}")
+        if front_distance > contract.max_hand_to_anchor_px:
+            errors.append(f"front-hand-detached:{index}:{front_distance:.2f}")
+
+        muzzle_forward = float(muzzle[0]) - float(anchor[0])
+        if muzzle_forward < contract.min_muzzle_forward_px:
+            errors.append(f"muzzle-not-forward:{index}:{muzzle_forward:.2f}")
+
+    pairs = [(index - 1, index) for index in range(1, len(sockets))]
+    if loop and len(sockets) > 1:
+        pairs.append((len(sockets) - 1, 0))
+
+    for left_index, right_index in pairs:
+        left = sockets[left_index]
+        right = sockets[right_index]
+        label = f"{left_index}->{right_index}"
+        anchor_delta = _point_distance(
+            left["weapon_anchor"],
+            right["weapon_anchor"],
+        )
+        if anchor_delta > contract.max_anchor_delta_px:
+            errors.append(f"socket-anchor-jump:{label}:{anchor_delta:.2f}")
+
+        angle_delta = _angle_delta(
+            left["angle_degrees"],
+            right["angle_degrees"],
+        )
+        if angle_delta > contract.max_angle_delta_degrees:
+            errors.append(f"socket-angle-jump:{label}:{angle_delta:.2f}")
+
+        scale_delta = abs(float(right["scale"]) - float(left["scale"]))
+        if scale_delta > contract.max_scale_delta:
+            errors.append(f"socket-scale-jump:{label}:{scale_delta:.4f}")
+
+    return SocketQualityResult(not errors, tuple(errors))
+
+
+class BankContractError(ValueError):
+    pass
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _require_int(value: object, label: str, *, minimum: int = 0) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise BankContractError(f"{label} must be an integer >= {minimum}")
+    return value
+
+
+def _require_number(
+    value: object,
+    label: str,
+    *,
+    minimum: float = 0.0,
+    strict: bool = False,
+) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise BankContractError(f"{label} must be numeric")
+    number = float(value)
+    if (strict and number <= minimum) or (not strict and number < minimum):
+        op = ">" if strict else ">="
+        raise BankContractError(f"{label} must be {op} {minimum}")
+    return number
+
+
+def _validate_bank_contract(data: object) -> dict:
+    if not isinstance(data, dict):
+        raise BankContractError("contract must be an object")
+    schema = data.get("schema")
+    if schema not in {1, 2}:
+        raise BankContractError("contract schema must be 1 or 2")
+
+    identity_keys = ("quality_contract", "actor", "weapon") if schema == 1 else (
+        "quality_contract",
+        "surface",
+        "actor",
+        "variant",
+    )
+    for key in identity_keys:
+        if not isinstance(data.get(key), str) or not data[key].strip():
+            raise BankContractError(f"{key} must be a non-empty string")
+
+    composition = data.get("composition", "integrated")
+    if composition not in {"integrated", "socketed-body", "weapon-layer"}:
+        raise BankContractError(
+            "composition must be integrated, socketed-body or weapon-layer"
+        )
+
+    socket_quality_data = data.get("socket_quality", {})
+    if not isinstance(socket_quality_data, dict):
+        raise BankContractError("socket_quality must be an object")
+    socket_quality = SocketQualityContract(
+        min_hand_separation_px=_require_number(
+            socket_quality_data.get("min_hand_separation_px", 6.0),
+            "socket_quality.min_hand_separation_px",
+        ),
+        max_hand_separation_px=_require_number(
+            socket_quality_data.get("max_hand_separation_px", 72.0),
+            "socket_quality.max_hand_separation_px",
+            strict=True,
+        ),
+        max_hand_to_anchor_px=_require_number(
+            socket_quality_data.get("max_hand_to_anchor_px", 44.0),
+            "socket_quality.max_hand_to_anchor_px",
+            strict=True,
+        ),
+        min_muzzle_forward_px=_require_number(
+            socket_quality_data.get("min_muzzle_forward_px", 12.0),
+            "socket_quality.min_muzzle_forward_px",
+        ),
+        max_anchor_delta_px=_require_number(
+            socket_quality_data.get("max_anchor_delta_px", 10.0),
+            "socket_quality.max_anchor_delta_px",
+            strict=True,
+        ),
+        max_angle_delta_degrees=_require_number(
+            socket_quality_data.get("max_angle_delta_degrees", 10.0),
+            "socket_quality.max_angle_delta_degrees",
+            strict=True,
+        ),
+        max_scale_delta=_require_number(
+            socket_quality_data.get("max_scale_delta", 0.15),
+            "socket_quality.max_scale_delta",
+        ),
+    )
+    if socket_quality.min_hand_separation_px >= socket_quality.max_hand_separation_px:
+        raise BankContractError(
+            "socket_quality hand separation minimum must be smaller than maximum"
+        )
+
+    cell = data.get("cell")
+    if not isinstance(cell, dict):
+        raise BankContractError("cell must be an object")
+    width = _require_int(cell.get("width"), "cell.width", minimum=1)
+    height = _require_int(cell.get("height"), "cell.height", minimum=1)
+
+    parts = data.get("parts")
+    if not isinstance(parts, dict) or not parts:
+        raise BankContractError("parts must be a non-empty object")
+    normalized_parts: dict[str, dict] = {}
+    for name, part in sorted(parts.items()):
+        if not isinstance(name, str) or not name:
+            raise BankContractError("part names must be non-empty strings")
+        if not isinstance(part, dict):
+            raise BankContractError(f"part {name} must be an object")
+        columns = _require_int(part.get("columns"), f"parts.{name}.columns", minimum=1)
+        rows = _require_int(part.get("rows"), f"parts.{name}.rows", minimum=1)
+        normalized_parts[name] = {"columns": columns, "rows": rows}
+
+    animations = data.get("animations")
+    if not isinstance(animations, list) or not animations:
+        raise BankContractError("animations must be a non-empty array")
+
+    seen_names: set[str] = set()
+    seen_rows: set[tuple[str, int]] = set()
+    normalized_animations: list[dict] = []
+    for index, animation in enumerate(animations):
+        if not isinstance(animation, dict):
+            raise BankContractError(f"animations[{index}] must be an object")
+        name = animation.get("name")
+        if not isinstance(name, str) or not name:
+            raise BankContractError(f"animations[{index}].name must be a non-empty string")
+        if name in seen_names:
+            raise BankContractError(f"duplicate animation name: {name}")
+        seen_names.add(name)
+
+        part_name = animation.get("part")
+        if part_name not in normalized_parts:
+            raise BankContractError(f"animation {name} references unknown part {part_name!r}")
+        row = _require_int(animation.get("row"), f"animation {name}.row")
+        if row >= normalized_parts[part_name]["rows"]:
+            raise BankContractError(f"animation {name} row {row} exceeds part {part_name}")
+        row_key = (part_name, row)
+        if row_key in seen_rows:
+            raise BankContractError(f"part row reused: {part_name}:{row}")
+        seen_rows.add(row_key)
+
+        authored = _require_int(
+            animation.get("authored_frames"),
+            f"animation {name}.authored_frames",
+            minimum=1,
+        )
+        slots = animation.get("slots")
+        if not isinstance(slots, list) or not slots:
+            raise BankContractError(f"animation {name}.slots must be a non-empty array")
+        if len(slots) > normalized_parts[part_name]["columns"]:
+            raise BankContractError(f"animation {name} has more slots than part columns")
+        normalized_slots: list[int] = []
+        for slot_index, source_index in enumerate(slots):
+            source_index = _require_int(
+                source_index,
+                f"animation {name}.slots[{slot_index}]",
+            )
+            if source_index >= authored:
+                raise BankContractError(
+                    f"animation {name} slot {slot_index} references missing authored frame {source_index}"
+                )
+            normalized_slots.append(source_index)
+
+        fps = animation.get("fps")
+        if isinstance(fps, bool) or not isinstance(fps, (int, float)) or fps <= 0:
+            raise BankContractError(f"animation {name}.fps must be > 0")
+        loop = animation.get("loop")
+        if not isinstance(loop, bool):
+            raise BankContractError(f"animation {name}.loop must be boolean")
+        allowed_detached = _require_int(
+            animation.get("allowed_detached_components", 0),
+            f"animation {name}.allowed_detached_components",
+        )
+        source_dir = animation.get("source_dir", name)
+        if not isinstance(source_dir, str) or not source_dir:
+            raise BankContractError(f"animation {name}.source_dir must be a non-empty string")
+
+        sockets = animation.get("sockets")
+        normalized_sockets = None
+        if sockets is not None:
+            if composition != "socketed-body":
+                raise BankContractError(
+                    f"animation {name} declares sockets but composition is {composition}"
+                )
+            if not isinstance(sockets, list) or len(sockets) != authored:
+                raise BankContractError(
+                    f"animation {name}.sockets must contain exactly {authored} authored-frame entries"
+                )
+            normalized_sockets = []
+            for socket_index, socket in enumerate(sockets):
+                if not isinstance(socket, dict):
+                    raise BankContractError(
+                        f"animation {name}.sockets[{socket_index}] must be an object"
+                    )
+                required = ("weapon_anchor", "rear_hand", "front_hand", "muzzle")
+                missing = [key for key in required if key not in socket]
+                if missing:
+                    raise BankContractError(
+                        f"animation {name}.sockets[{socket_index}] missing {','.join(missing)}"
+                    )
+                normalized_socket = {}
+                for point_name in required:
+                    point = socket[point_name]
+                    if (
+                        not isinstance(point, list)
+                        or len(point) != 2
+                        or any(
+                            isinstance(value, bool) or not isinstance(value, (int, float))
+                            for value in point
+                        )
+                    ):
+                        raise BankContractError(
+                            f"animation {name}.sockets[{socket_index}].{point_name} must be [x,y]"
+                        )
+                    x, y = float(point[0]), float(point[1])
+                    if not (0.0 <= x <= width and 0.0 <= y <= height):
+                        raise BankContractError(
+                            f"animation {name}.sockets[{socket_index}].{point_name} outside cell"
+                        )
+                    normalized_socket[point_name] = [x, y]
+                angle = socket.get("angle_degrees", 0.0)
+                scale = socket.get("scale", 1.0)
+                if isinstance(angle, bool) or not isinstance(angle, (int, float)):
+                    raise BankContractError(
+                        f"animation {name}.sockets[{socket_index}].angle_degrees must be numeric"
+                    )
+                if (
+                    isinstance(scale, bool)
+                    or not isinstance(scale, (int, float))
+                    or scale <= 0
+                ):
+                    raise BankContractError(
+                        f"animation {name}.sockets[{socket_index}].scale must be > 0"
+                    )
+                z = socket.get("z", "front")
+                if z not in {"front", "back"}:
+                    raise BankContractError(
+                        f"animation {name}.sockets[{socket_index}].z must be front or back"
+                    )
+                normalized_socket["angle_degrees"] = float(angle)
+                normalized_socket["scale"] = float(scale)
+                normalized_socket["z"] = z
+                normalized_sockets.append(normalized_socket)
+
+        if composition == "socketed-body" and normalized_sockets is None:
+            raise BankContractError(
+                f"animation {name} requires authored sockets for socketed-body composition"
+            )
+
+        if composition == "socketed-body" and normalized_sockets is not None:
+            socket_result = validate_socket_sequence(
+                normalized_sockets,
+                socket_quality,
+                loop=loop,
+            )
+            if not socket_result.ok:
+                raise BankContractError(
+                    f"animation {name} socket quality failed: "
+                    + ",".join(socket_result.errors)
+                )
+
+        normalized_animations.append(
+            {
+                "name": name,
+                "part": part_name,
+                "row": row,
+                "fps": float(fps),
+                "loop": loop,
+                "authored_frames": authored,
+                "slots": normalized_slots,
+                "source_dir": source_dir,
+                "allowed_detached_components": allowed_detached,
+                "sockets": normalized_sockets,
+            }
+        )
+
+    identity = (
+        {"weapon": data["weapon"]}
+        if schema == 1
+        else {"surface": data["surface"], "variant": data["variant"]}
+    )
+    return {
+        "schema": schema,
+        "quality_contract": data["quality_contract"],
+        "actor": data["actor"],
+        **identity,
+        "composition": composition,
+        "socket_quality": asdict(socket_quality),
+        "cell": {"width": width, "height": height},
+        "parts": normalized_parts,
+        "animations": normalized_animations,
+    }
+
+
+def load_bank_contract(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise BankContractError(f"cannot load contract {path}: {exc}") from exc
+    return _validate_bank_contract(data)
+
+
+def _save_png_deterministic(image: Image.Image, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(path, "PNG", optimize=False, compress_level=9)
+
+
+def build_bank(
+    contract_path: Path,
+    frames_root: Path,
+    output_dir: Path,
+) -> dict:
+    contract = load_bank_contract(contract_path)
+    cell_w = contract["cell"]["width"]
+    cell_h = contract["cell"]["height"]
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    part_images: dict[str, Image.Image] = {}
+    for part_name, part in contract["parts"].items():
+        part_images[part_name] = Image.new(
+            "RGBA",
+            (part["columns"] * cell_w, part["rows"] * cell_h),
+            (0, 0, 0, 0),
+        )
+
+    manifest_animations: list[dict] = []
+    for animation in contract["animations"]:
+        authored_frames: list[Image.Image] = []
+        source_hashes: list[str] = []
+        source_dir = frames_root / animation["source_dir"]
+        lint_config = LintConfig(
+            edge_guard_px=0,
+            allowed_detached_components=animation["allowed_detached_components"],
+        )
+        for source_index in range(animation["authored_frames"]):
+            path = source_dir / f"{source_index:03d}.png"
+            if not path.is_file():
+                raise BankContractError(f"missing authored frame: {path}")
+            frame = Image.open(path).convert("RGBA")
+            if frame.size != (cell_w, cell_h):
+                raise BankContractError(
+                    f"bad frame size for {path}: {frame.size} != {(cell_w, cell_h)}"
+                )
+            lint = lint_frame(frame, lint_config)
+            if not lint.ok:
+                raise BankContractError(
+                    f"frame failed lint {path}: {','.join(lint.errors)}"
+                )
+            authored_frames.append(_clean_transparent_rgb(frame))
+            source_hashes.append(_sha256_file(path))
+
+        part = part_images[animation["part"]]
+        regions: list[dict] = []
+        for column, source_index in enumerate(animation["slots"]):
+            frame = authored_frames[source_index]
+            x = column * cell_w
+            y = animation["row"] * cell_h
+            part.alpha_composite(frame, (x, y))
+            regions.append(
+                {
+                    "slot": column,
+                    "source_index": source_index,
+                    "x": x,
+                    "y": y,
+                    "width": cell_w,
+                    "height": cell_h,
+                }
+            )
+
+        manifest_animations.append(
+            {
+                "name": animation["name"],
+                "part": animation["part"],
+                "row": animation["row"],
+                "fps": animation["fps"],
+                "loop": animation["loop"],
+                "authored_frames": animation["authored_frames"],
+                "stored_frames": len(animation["slots"]),
+                "slots": animation["slots"],
+                "source_sha256": source_hashes,
+                "regions": regions,
+                "sockets": (
+                    [animation["sockets"][source_index] for source_index in animation["slots"]]
+                    if animation["sockets"] is not None
+                    else None
+                ),
+            }
+        )
+
+    manifest_parts: dict[str, dict] = {}
+    for part_name, image in sorted(part_images.items()):
+        filename = f"{part_name}.png"
+        path = output_dir / filename
+        image = _clean_transparent_rgb(image)
+        _save_png_deterministic(image, path)
+        part = contract["parts"][part_name]
+        manifest_parts[part_name] = {
+            "filename": filename,
+            "sha256": _sha256_file(path),
+            "size": [image.width, image.height],
+            "columns": part["columns"],
+            "rows": part["rows"],
+        }
+
+    if contract["schema"] == 1:
+        identity = {
+            "kind": "pawn-slug-sprite-forge-bank",
+            "weapon": contract["weapon"],
+        }
+    else:
+        identity = {
+            "kind": "chess-studio-sprite-forge-bank",
+            "surface": contract["surface"],
+            "variant": contract["variant"],
+        }
+
+    manifest = {
+        "schema": contract["schema"],
+        **identity,
+        "quality_contract": contract["quality_contract"],
+        "actor": contract["actor"],
+        "composition": contract["composition"],
+        "socket_quality": contract["socket_quality"],
+        "cell": contract["cell"],
+        "contract_sha256": _sha256_file(contract_path),
+        "parts": manifest_parts,
+        "animations": manifest_animations,
+    }
+    manifest_path = output_dir / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return manifest
+
+
+DEFAULT_MATTHIAS_ACTIONS = (
+    "idle",
+    "walk",
+    "run",
+    "jump",
+    "fall",
+    "land",
+    "crouch",
+    "crouch_walk",
+    "shoot",
+    "shoot_up",
+    "shoot_down",
+    "shoot_diag_up",
+    "shoot_diag_up_alt",
+    "shoot_diag_down",
+    "shoot_crouch",
+    "reload",
+    "hurt",
+    "die",
+)
+
+
+@dataclass(frozen=True)
+class BatchFrameMetrics:
+    bbox: tuple[int, int, int, int]
+    width: int
+    height: int
+    foot_y: int
+    alpha_pixels: int
+    centroid_x: float
+    centroid_y: float
+
+
+def batch_frame_metrics(
+    image: Image.Image,
+    alpha_threshold: int = 8,
+) -> BatchFrameMetrics:
+    rgba = image.convert("RGBA")
+    alpha = rgba.getchannel("A")
+    mask = alpha.point(
+        lambda value: 255 if value >= alpha_threshold else 0
+    )
+    bbox = mask.getbbox()
+    if bbox is None:
+        raise GeometryError("empty-frame")
+
+    left, top, right, bottom = bbox
+    histogram = mask.histogram()
+    alpha_pixels = histogram[255]
+    if alpha_pixels <= 0:
+        raise GeometryError("empty-frame")
+
+    # BOX projections keep the expensive work inside Pillow. Their values are
+    # proportional to occupied pixels per column/row, so the weighted means
+    # provide a stable centroid without a Python per-pixel flood fill.
+    x_projection = list(
+        mask.resize(
+            (mask.width, 1),
+            Image.Resampling.BOX,
+        ).get_flattened_data()
+    )
+    y_projection = list(
+        mask.resize(
+            (1, mask.height),
+            Image.Resampling.BOX,
+        ).get_flattened_data()
+    )
+    x_mass = sum(x_projection)
+    y_mass = sum(y_projection)
+    centroid_x = (
+        sum(index * value for index, value in enumerate(x_projection))
+        / x_mass
+        if x_mass
+        else (left + right) / 2.0
+    )
+    centroid_y = (
+        sum(index * value for index, value in enumerate(y_projection))
+        / y_mass
+        if y_mass
+        else (top + bottom) / 2.0
+    )
+
+    return BatchFrameMetrics(
+        bbox=bbox,
+        width=right - left,
+        height=bottom - top,
+        foot_y=bottom,
+        alpha_pixels=alpha_pixels,
+        centroid_x=centroid_x,
+        centroid_y=centroid_y,
+    )
+
+
+def _batch_frame_path(
+    frames_root: Path,
+    actor: str,
+    weapon: str,
+    row: int,
+    column: int,
+) -> Path:
+    return (
+        frames_root
+        / weapon
+        / "frames"
+        / f"{actor}_{weapon}_r{row:02d}_c{column:02d}.png"
+    )
+
+
+def _load_batch_frame(
+    frames_root: Path,
+    actor: str,
+    weapon: str,
+    row: int,
+    column: int,
+) -> Image.Image:
+    path = _batch_frame_path(
+        frames_root,
+        actor,
+        weapon,
+        row,
+        column,
+    )
+    if not path.is_file():
+        raise BankContractError(f"missing batch frame: {path}")
+    return Image.open(path).convert("RGBA")
+
+
+def _csv_values(raw: str) -> list[str]:
+    return [value.strip() for value in raw.split(",") if value.strip()]
+
+
+def audit_sprite_batch(
+    frames_root: Path,
+    *,
+    actor: str,
+    weapons: list[str],
+    actions: list[str],
+    canon_weapons: list[str],
+    parity_actions: set[str],
+    columns: int = 8,
+    pass_scale_delta: float = 0.04,
+    max_auto_scale_delta: float = 0.12,
+    alpha_threshold: int = 8,
+) -> dict:
+    if columns <= 0:
+        raise BankContractError("batch columns must be positive")
+    if not weapons:
+        raise BankContractError("batch weapons cannot be empty")
+    if not canon_weapons:
+        raise BankContractError("batch canon weapons cannot be empty")
+    unknown_canon = sorted(set(canon_weapons) - set(weapons))
+    if unknown_canon:
+        raise BankContractError(
+            "unknown canon weapons: " + ",".join(unknown_canon)
+        )
+    unknown_actions = sorted(parity_actions - set(actions))
+    if unknown_actions:
+        raise BankContractError(
+            "unknown parity actions: " + ",".join(unknown_actions)
+        )
+    if not 0.0 <= pass_scale_delta <= max_auto_scale_delta:
+        raise BankContractError(
+            "pass scale delta must be between zero and max auto scale delta"
+        )
+
+    payload: dict = {
+        "schema": 1,
+        "kind": "pawn-slug-sprite-forge-batch-audit",
+        "actor": actor,
+        "columns": columns,
+        "actions": actions,
+        "canonWeapons": canon_weapons,
+        "thresholds": {
+            "passScaleDelta": pass_scale_delta,
+            "maxAutoScaleDelta": max_auto_scale_delta,
+        },
+        "weapons": {},
+        "parity": {},
+        "temporal": {},
+    }
+
+    for weapon in weapons:
+        rows: dict[str, dict] = {}
+        for row, action in enumerate(actions):
+            metrics = [
+                batch_frame_metrics(
+                    _load_batch_frame(
+                        frames_root,
+                        actor,
+                        weapon,
+                        row,
+                        column,
+                    ),
+                    alpha_threshold,
+                )
+                for column in range(columns)
+            ]
+            heights = [item.height for item in metrics]
+            widths = [item.width for item in metrics]
+            feet = [item.foot_y for item in metrics]
+            rows[action] = {
+                "row": row,
+                "frames": [asdict(item) for item in metrics],
+                "medianHeight": statistics.median(heights),
+                "heightRange": max(heights) - min(heights),
+                "maxHeightStep": max(
+                    (
+                        abs(heights[index + 1] - heights[index])
+                        for index in range(len(heights) - 1)
+                    ),
+                    default=0,
+                ),
+                "medianWidth": statistics.median(widths),
+                "widthRange": max(widths) - min(widths),
+                "footRange": max(feet) - min(feet),
+            }
+        payload["weapons"][weapon] = rows
+
+    for action in sorted(parity_actions):
+        row = actions.index(action)
+        canonical_heights: list[float] = []
+        for column in range(columns):
+            canonical_heights.append(
+                float(
+                    statistics.median(
+                        [
+                            payload["weapons"][weapon][action]["frames"][
+                                column
+                            ]["height"]
+                            for weapon in canon_weapons
+                        ]
+                    )
+                )
+            )
+
+        action_payload = {
+            "row": row,
+            "canonicalHeights": canonical_heights,
+            "weapons": {},
+        }
+        for weapon in weapons:
+            if weapon in canon_weapons:
+                scales = [1.0] * columns
+                status = "canon"
+            else:
+                current_heights = [
+                    payload["weapons"][weapon][action]["frames"][column][
+                        "height"
+                    ]
+                    for column in range(columns)
+                ]
+                scales = [
+                    canonical_heights[column] / current_heights[column]
+                    for column in range(columns)
+                ]
+                max_delta = max(abs(scale - 1.0) for scale in scales)
+                if max_delta <= pass_scale_delta:
+                    status = "pass"
+                elif max_delta <= max_auto_scale_delta:
+                    status = "safe-normalization"
+                else:
+                    status = "needs-authored-source"
+
+            action_payload["weapons"][weapon] = {
+                "status": status,
+                "scaleY": [round(scale, 6) for scale in scales],
+                "maxAbsScaleDelta": round(
+                    max(abs(scale - 1.0) for scale in scales),
+                    6,
+                ),
+            }
+        payload["parity"][action] = action_payload
+
+    temporal_thresholds = {
+        "reload": {
+            "maxHeightStepRatio": 0.18,
+            "maxFootStepRatio": 0.08,
+            "maxCentroidStepRatio": 0.15,
+        },
+        "die": {
+            "maxHeightStepRatio": 0.35,
+            "maxFootStepRatio": 0.18,
+            "maxCentroidStepRatio": 0.30,
+        },
+    }
+    for action, thresholds in temporal_thresholds.items():
+        if action not in actions:
+            continue
+        action_payload = {"row": actions.index(action), "weapons": {}}
+        for weapon in weapons:
+            row_payload = payload["weapons"][weapon][action]
+            frames = row_payload["frames"]
+            median_height = max(1.0, float(row_payload["medianHeight"]))
+
+            height_steps = [
+                abs(frames[index + 1]["height"] - frames[index]["height"])
+                for index in range(len(frames) - 1)
+            ]
+            foot_steps = [
+                abs(frames[index + 1]["foot_y"] - frames[index]["foot_y"])
+                for index in range(len(frames) - 1)
+            ]
+            centroid_steps = [
+                (
+                    (
+                        frames[index + 1]["centroid_x"]
+                        - frames[index]["centroid_x"]
+                    )
+                    ** 2
+                    + (
+                        frames[index + 1]["centroid_y"]
+                        - frames[index]["centroid_y"]
+                    )
+                    ** 2
+                )
+                ** 0.5
+                for index in range(len(frames) - 1)
+            ]
+
+            def step_report(values: list[float]) -> tuple[float, list[int] | None]:
+                if not values:
+                    return 0.0, None
+                value = max(values)
+                index = values.index(value)
+                return float(value), [index, index + 1]
+
+            height_step, height_pair = step_report(height_steps)
+            foot_step, foot_pair = step_report(foot_steps)
+            centroid_step, centroid_pair = step_report(centroid_steps)
+            ratios = {
+                "maxHeightStepRatio": height_step / median_height,
+                "maxFootStepRatio": foot_step / median_height,
+                "maxCentroidStepRatio": centroid_step / median_height,
+            }
+            reasons = [
+                key
+                for key, value in ratios.items()
+                if value > float(thresholds[key])
+            ]
+            action_payload["weapons"][weapon] = {
+                "status": "review" if reasons else "pass",
+                "reasons": reasons,
+                "maxHeightStepRatio": round(ratios["maxHeightStepRatio"], 6),
+                "maxHeightStepPair": height_pair,
+                "maxFootStepRatio": round(ratios["maxFootStepRatio"], 6),
+                "maxFootStepPair": foot_pair,
+                "maxCentroidStepRatio": round(
+                    ratios["maxCentroidStepRatio"], 6
+                ),
+                "maxCentroidStepPair": centroid_pair,
+            }
+        payload["temporal"][action] = action_payload
+
+    return payload
+
+
+def _normalize_batch_frame_y(
+    image: Image.Image,
+    *,
+    target_height: int,
+    alpha_threshold: int,
+) -> Image.Image:
+    rgba = image.convert("RGBA")
+    foreground = _foreground_bbox(rgba, alpha_threshold)
+    metrics = batch_frame_metrics(rgba, alpha_threshold)
+    if foreground is None:
+        raise GeometryError("empty-frame")
+
+    # Component topology is intentionally checked only for frames that will be
+    # mutated. The full-batch audit stays cheap; the repair path stays strict.
+    lint = lint_frame(
+        rgba,
+        LintConfig(
+            alpha_threshold=alpha_threshold,
+            edge_guard_px=0,
+            min_detached_area=1,
+            allowed_detached_components=0,
+        ),
+    )
+    if not lint.ok or lint.main_component is None:
+        raise GeometryError(
+            "repair-lint:" + ",".join(lint.errors)
+        )
+    if foreground != lint.main_component.bbox:
+        raise GeometryError(
+            "detached-content-not-safe-for-y-normalization"
+        )
+    if target_height <= 0:
+        raise GeometryError("invalid-target-height")
+
+    left, top, right, bottom = foreground
+    crop = rgba.crop(foreground)
+    resized = crop.resize(
+        (crop.width, target_height),
+        Image.Resampling.NEAREST,
+    )
+    dest_y = bottom - target_height
+    if dest_y < 0:
+        raise GeometryError(
+            f"would-clip-y-normalization:{dest_y}"
+        )
+
+    out = Image.new("RGBA", rgba.size, (0, 0, 0, 0))
+    out.alpha_composite(resized, (left, dest_y))
+    out = _clean_transparent_rgb(out)
+    after = batch_frame_metrics(out, alpha_threshold)
+    if after.foot_y != metrics.foot_y:
+        raise GeometryError(
+            f"foot-drift:{after.foot_y}!={metrics.foot_y}"
+        )
+    if after.width != metrics.width:
+        raise GeometryError(
+            f"width-drift:{after.width}!={metrics.width}"
+        )
+    if abs(after.height - target_height) > 1:
+        raise GeometryError(
+            f"height-drift:{after.height}!={target_height}"
+        )
+    return out
+
+
+def _assemble_batch_atlas(
+    frames_root: Path,
+    *,
+    actor: str,
+    weapon: str,
+    rows: int,
+    columns: int,
+    cell_size: int,
+    replacements: dict[tuple[int, int], Image.Image],
+) -> Image.Image:
+    atlas = Image.new(
+        "RGBA",
+        (columns * cell_size, rows * cell_size),
+        (0, 0, 0, 0),
+    )
+    for row in range(rows):
+        for column in range(columns):
+            frame = replacements.get((row, column))
+            if frame is None:
+                frame = _load_batch_frame(
+                    frames_root,
+                    actor,
+                    weapon,
+                    row,
+                    column,
+                )
+            if frame.size != (cell_size, cell_size):
+                raise BankContractError(
+                    f"batch frame size {frame.size} != "
+                    f"{(cell_size, cell_size)}"
+                )
+            atlas.alpha_composite(
+                frame,
+                (column * cell_size, row * cell_size),
+            )
+    return atlas
+
+
+def _checkerboard(
+    size: tuple[int, int],
+    tile: int = 16,
+) -> Image.Image:
+    image = Image.new("RGBA", size, (238, 238, 238, 255))
+    draw = ImageDraw.Draw(image)
+    for y in range(0, size[1], tile):
+        for x in range(0, size[0], tile):
+            if ((x // tile) + (y // tile)) % 2:
+                draw.rectangle(
+                    (
+                        x,
+                        y,
+                        min(x + tile - 1, size[0] - 1),
+                        min(y + tile - 1, size[1] - 1),
+                    ),
+                    fill=(205, 205, 205, 255),
+                )
+    return image
+
+
+def _render_batch_review(
+    current: Image.Image,
+    candidate: Image.Image,
+    *,
+    row: int,
+    weapon: str,
+    action: str,
+    columns: int,
+    cell_size: int,
+    output: Path,
+) -> None:
+    strip_box = (
+        0,
+        row * cell_size,
+        columns * cell_size,
+        (row + 1) * cell_size,
+    )
+    label_height = 28
+    review_scale = 0.5
+    panels: list[Image.Image] = []
+    for label, atlas in (
+        ("CURRENT", current),
+        ("CANDIDATE", candidate),
+    ):
+        strip = atlas.crop(strip_box)
+        background = _checkerboard(strip.size)
+        background.alpha_composite(strip)
+        reduced = background.resize(
+            (
+                round(background.width * review_scale),
+                round(background.height * review_scale),
+            ),
+            Image.Resampling.NEAREST,
+        )
+        panel = Image.new(
+            "RGBA",
+            (reduced.width, reduced.height + label_height),
+            (18, 20, 24, 255),
+        )
+        ImageDraw.Draw(panel).text(
+            (8, 7),
+            f"{weapon.upper()} {action.upper()} · {label}",
+            fill=(240, 240, 240, 255),
+        )
+        panel.alpha_composite(reduced, (0, label_height))
+        panels.append(panel)
+
+    board = Image.new(
+        "RGBA",
+        (
+            max(panel.width for panel in panels),
+            sum(panel.height for panel in panels),
+        ),
+        (12, 14, 18, 255),
+    )
+    y = 0
+    for panel in panels:
+        board.alpha_composite(panel, (0, y))
+        y += panel.height
+    _save_png_deterministic(board, output)
+
+
+def _render_alpha_background_proof(
+    candidate: Image.Image,
+    *,
+    row: int,
+    weapon: str,
+    action: str,
+    columns: int,
+    cell_size: int,
+    output: Path,
+) -> None:
+    strip_box = (
+        0,
+        row * cell_size,
+        columns * cell_size,
+        (row + 1) * cell_size,
+    )
+    strip = candidate.crop(strip_box)
+    label_height = 28
+    review_scale = 0.5
+    panels: list[Image.Image] = []
+    for label, color in (
+        ("LIGHT", (242, 242, 242, 255)),
+        ("DARK", (28, 30, 34, 255)),
+    ):
+        background = Image.new("RGBA", strip.size, color)
+        background.alpha_composite(strip)
+        reduced = background.resize(
+            (
+                round(background.width * review_scale),
+                round(background.height * review_scale),
+            ),
+            Image.Resampling.NEAREST,
+        )
+        panel = Image.new(
+            "RGBA",
+            (reduced.width, reduced.height + label_height),
+            (18, 20, 24, 255),
+        )
+        ImageDraw.Draw(panel).text(
+            (8, 7),
+            f"{weapon.upper()} {action.upper()} ALPHA · {label}",
+            fill=(240, 240, 240, 255),
+        )
+        panel.alpha_composite(reduced, (0, label_height))
+        panels.append(panel)
+
+    board = Image.new(
+        "RGBA",
+        (
+            max(panel.width for panel in panels),
+            sum(panel.height for panel in panels),
+        ),
+        (12, 14, 18, 255),
+    )
+    y = 0
+    for panel in panels:
+        board.alpha_composite(panel, (0, y))
+        y += panel.height
+    _save_png_deterministic(board, output)
+
+
+def repair_sprite_parity(
+    frames_root: Path,
+    *,
+    actor: str,
+    target_weapon: str,
+    action: str,
+    actions: list[str],
+    canon_weapons: list[str],
+    output_atlas: Path,
+    report_path: Path,
+    preview_path: Path,
+    columns: int = 8,
+    cell_size: int = 416,
+    max_auto_scale_delta: float = 0.12,
+    alpha_threshold: int = 8,
+) -> dict:
+    if action not in actions:
+        raise BankContractError(f"unknown repair action: {action}")
+    if not canon_weapons:
+        raise BankContractError("repair canon weapons cannot be empty")
+
+    row = actions.index(action)
+    replacements: dict[tuple[int, int], Image.Image] = {}
+    frame_report: list[dict] = []
+
+    for column in range(columns):
+        current = _load_batch_frame(
+            frames_root,
+            actor,
+            target_weapon,
+            row,
+            column,
+        )
+        current_metrics = batch_frame_metrics(
+            current,
+            alpha_threshold,
+        )
+        canonical_heights = [
+            batch_frame_metrics(
+                _load_batch_frame(
+                    frames_root,
+                    actor,
+                    weapon,
+                    row,
+                    column,
+                ),
+                alpha_threshold,
+            ).height
+            for weapon in canon_weapons
+        ]
+        target_height = round(statistics.median(canonical_heights))
+        scale_y = target_height / current_metrics.height
+        delta = abs(scale_y - 1.0)
+        if delta > max_auto_scale_delta:
+            raise GeometryError(
+                "needs-authored-source:"
+                f"{target_weapon}:{action}:c{column}:"
+                f"scaleY={scale_y:.6f}>"
+                f"limit={max_auto_scale_delta:.6f}"
+            )
+
+        repaired = _normalize_batch_frame_y(
+            current,
+            target_height=target_height,
+            alpha_threshold=alpha_threshold,
+        )
+        replacements[(row, column)] = repaired
+        frame_report.append(
+            {
+                "column": column,
+                "sourceHeight": current_metrics.height,
+                "targetHeight": target_height,
+                "scaleY": round(scale_y, 6),
+                "footY": current_metrics.foot_y,
+            }
+        )
+
+    current_atlas = _assemble_batch_atlas(
+        frames_root,
+        actor=actor,
+        weapon=target_weapon,
+        rows=len(actions),
+        columns=columns,
+        cell_size=cell_size,
+        replacements={},
+    )
+    candidate = _assemble_batch_atlas(
+        frames_root,
+        actor=actor,
+        weapon=target_weapon,
+        rows=len(actions),
+        columns=columns,
+        cell_size=cell_size,
+        replacements=replacements,
+    )
+
+    for check_row in range(len(actions)):
+        if check_row == row:
+            continue
+        top = check_row * cell_size
+        bounds = (
+            0,
+            top,
+            columns * cell_size,
+            top + cell_size,
+        )
+        if (
+            candidate.crop(bounds).tobytes()
+            != current_atlas.crop(bounds).tobytes()
+        ):
+            raise GeometryError(
+                f"untouched-row-drift:{check_row}"
+            )
+
+    _save_png_deterministic(candidate, output_atlas)
+    _render_batch_review(
+        current_atlas,
+        candidate,
+        row=row,
+        weapon=target_weapon,
+        action=action,
+        columns=columns,
+        cell_size=cell_size,
+        output=preview_path,
+    )
+
+    report = {
+        "schema": 1,
+        "kind": "pawn-slug-sprite-forge-parity-repair",
+        "actor": actor,
+        "weapon": target_weapon,
+        "action": action,
+        "row": row,
+        "canonWeapons": canon_weapons,
+        "maxAutoScaleDelta": max_auto_scale_delta,
+        "untouchedRowsPixelIdentical": True,
+        "frames": frame_report,
+        "sha256": _sha256_file(output_atlas),
+    }
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return report
+
+
+
+MATTHIAS_HURT_STANDING_SLOTS = (0, 1, 2, 2, 1, 0, 1, 0)
+MATTHIAS_MACHINEGUN_HURT_DONOR_COLUMN = 3
+MATTHIAS_MACHINEGUN_HURT_DX = (-2, 7, 4, 0, -2, -18, -18, -18)
+MATTHIAS_MACHINEGUN_HURT_PATCH = (90, 116, 279, 210)
+MATTHIAS_MACHINEGUN_HURT_MAX_RGB_MEAN = 165.0
+
+MATTHIAS_MACHINEGUN_HURT_ALPHA_V2_DONOR_COLUMN = 4
+MATTHIAS_MACHINEGUN_HURT_ALPHA_V2_DX = (0, 13, 6, 2, 0, -17, -17, -17)
+MATTHIAS_MACHINEGUN_HURT_ALPHA_V2_PATCH = (80, 110, 305, 220)
+MATTHIAS_MACHINEGUN_HURT_ALPHA_V2_MAX_RGB_MEAN = 165.0
+MATTHIAS_MACHINEGUN_HURT_ALPHA_V2_MIN_COVERAGE = 0.985
+
+
+def _fill_transparent_from_shifted_patch(
+    target: Image.Image,
+    donor: Image.Image,
+    *,
+    dx: int,
+    patch: tuple[int, int, int, int],
+    max_rgb_mean: float,
+) -> tuple[Image.Image, int, tuple[int, int, int, int] | None]:
+    out = target.convert("RGBA").copy()
+    source = donor.convert("RGBA")
+    target_pixels = out.load()
+    source_pixels = source.load()
+    x0, y0, x1, y1 = patch
+
+    if not (
+        0 <= x0 < x1 <= source.width
+        and 0 <= y0 < y1 <= source.height
+        and out.size == source.size
+    ):
+        raise GeometryError("invalid-shifted-patch")
+
+    added = 0
+    changed_x: list[int] = []
+    changed_y: list[int] = []
+    for y in range(y0, y1):
+        for x in range(x0, x1):
+            target_x = x + dx
+            if target_x < 0 or target_x >= out.width:
+                continue
+            r, g, b, a = source_pixels[x, y]
+            if a == 0:
+                continue
+            if (r + g + b) / 3.0 > max_rgb_mean:
+                continue
+            if target_pixels[target_x, y][3] != 0:
+                continue
+            target_pixels[target_x, y] = (r, g, b, a)
+            added += 1
+            changed_x.append(target_x)
+            changed_y.append(y)
+
+    changed_bbox = None
+    if changed_x:
+        changed_bbox = (
+            min(changed_x),
+            min(changed_y),
+            max(changed_x) + 1,
+            max(changed_y) + 1,
+        )
+    return out, added, changed_bbox
+
+
+def _prove_untouched_batch_rows(
+    current: Image.Image,
+    candidate: Image.Image,
+    *,
+    rows: int,
+    columns: int,
+    cell_size: int,
+    changed_rows: set[int],
+) -> None:
+    for row in range(rows):
+        if row in changed_rows:
+            continue
+        bounds = (
+            0,
+            row * cell_size,
+            columns * cell_size,
+            (row + 1) * cell_size,
+        )
+        if current.crop(bounds).tobytes() != candidate.crop(bounds).tobytes():
+            raise GeometryError(f"untouched-row-drift:{row}")
+
+
+def _dark_patch_support(
+    image: Image.Image,
+    *,
+    patch: tuple[int, int, int, int],
+    max_rgb_mean: float,
+    alpha_threshold: int,
+) -> list[tuple[int, int]]:
+    source = image.convert("RGBA")
+    pixels = source.load()
+    x0, y0, x1, y1 = patch
+    if not (
+        0 <= x0 < x1 <= source.width
+        and 0 <= y0 < y1 <= source.height
+    ):
+        raise GeometryError("invalid-dark-support-patch")
+    support: list[tuple[int, int]] = []
+    for y in range(y0, y1):
+        for x in range(x0, x1):
+            r, g, b, a = pixels[x, y]
+            if a < alpha_threshold:
+                continue
+            if (r + g + b) / 3.0 > max_rgb_mean:
+                continue
+            support.append((x, y))
+    if not support:
+        raise GeometryError("empty-dark-support-patch")
+    return support
+
+
+def _translated_support_coverage(
+    target: Image.Image,
+    support: list[tuple[int, int]],
+    *,
+    dx: int,
+    alpha_threshold: int,
+) -> float:
+    alpha = target.convert("RGBA").getchannel("A")
+    total = 0
+    covered = 0
+    for x, y in support:
+        target_x = x + dx
+        if target_x < 0 or target_x >= alpha.width:
+            continue
+        total += 1
+        if alpha.getpixel((target_x, y)) >= alpha_threshold:
+            covered += 1
+    if total <= 0:
+        raise GeometryError("empty-translated-dark-support")
+    return covered / total
+
+
+def repair_matthias_machinegun_hurt_alpha_v2(
+    frames_root: Path,
+    output_dir: Path,
+    *,
+    actor: str = "matthias",
+    actions: tuple[str, ...] = DEFAULT_MATTHIAS_ACTIONS,
+    columns: int = 8,
+    cell_size: int = 416,
+    donor_column: int = MATTHIAS_MACHINEGUN_HURT_ALPHA_V2_DONOR_COLUMN,
+    dx: tuple[int, ...] = MATTHIAS_MACHINEGUN_HURT_ALPHA_V2_DX,
+    patch: tuple[int, int, int, int] = MATTHIAS_MACHINEGUN_HURT_ALPHA_V2_PATCH,
+    max_rgb_mean: float = MATTHIAS_MACHINEGUN_HURT_ALPHA_V2_MAX_RGB_MEAN,
+    min_coverage: float = MATTHIAS_MACHINEGUN_HURT_ALPHA_V2_MIN_COVERAGE,
+    alpha_threshold: int = 8,
+) -> dict:
+    if "hurt" not in actions:
+        raise BankContractError("machinegun hurt alpha repair requires hurt action")
+    if columns != len(dx):
+        raise BankContractError("machinegun hurt alpha dx count must match columns")
+    if donor_column < 0 or donor_column >= columns:
+        raise BankContractError("machinegun hurt alpha donor outside batch")
+    if not 0.0 < min_coverage <= 1.0:
+        raise BankContractError("machinegun hurt alpha min coverage must be in (0,1]")
+
+    hurt_row = actions.index("hurt")
+    rows = len(actions)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    frames = [
+        _load_batch_frame(
+            frames_root,
+            actor,
+            "machinegun",
+            hurt_row,
+            column,
+        )
+        for column in range(columns)
+    ]
+    donor = frames[donor_column]
+    support = _dark_patch_support(
+        donor,
+        patch=patch,
+        max_rgb_mean=max_rgb_mean,
+        alpha_threshold=alpha_threshold,
+    )
+    current_atlas = _assemble_batch_atlas(
+        frames_root,
+        actor=actor,
+        weapon="machinegun",
+        rows=rows,
+        columns=columns,
+        cell_size=cell_size,
+        replacements={},
+    )
+
+    replacements: dict[tuple[int, int], Image.Image] = {}
+    health: list[dict] = []
+    for column, current in enumerate(frames):
+        before_metrics = batch_frame_metrics(current, alpha_threshold)
+        before_coverage = _translated_support_coverage(
+            current,
+            support,
+            dx=dx[column],
+            alpha_threshold=alpha_threshold,
+        )
+        if column == donor_column:
+            repaired = current.copy()
+            added = 0
+            changed_bbox = None
+        else:
+            repaired, added, changed_bbox = _fill_transparent_from_shifted_patch(
+                current,
+                donor,
+                dx=dx[column],
+                patch=patch,
+                max_rgb_mean=max_rgb_mean,
+            )
+
+        before_pixels = current.load()
+        after_pixels = repaired.load()
+        for y in range(current.height):
+            for x in range(current.width):
+                if (
+                    before_pixels[x, y][3] != 0
+                    and before_pixels[x, y] != after_pixels[x, y]
+                ):
+                    raise GeometryError(
+                        f"machinegun-hurt-alpha-v2-overwrite:c{column}:{x},{y}"
+                    )
+
+        after_metrics = batch_frame_metrics(repaired, alpha_threshold)
+        if (
+            after_metrics.height != before_metrics.height
+            or after_metrics.foot_y != before_metrics.foot_y
+        ):
+            raise GeometryError(
+                f"machinegun-hurt-alpha-v2-geometry-drift:c{column}"
+            )
+        after_coverage = _translated_support_coverage(
+            repaired,
+            support,
+            dx=dx[column],
+            alpha_threshold=alpha_threshold,
+        )
+        if after_coverage < min_coverage:
+            raise GeometryError(
+                "machinegun-hurt-alpha-v2-coverage:"
+                f"c{column}:{after_coverage:.6f}<"
+                f"{min_coverage:.6f}"
+            )
+        replacements[(hurt_row, column)] = repaired
+        health.append(
+            {
+                "column": column,
+                "dx": dx[column],
+                "addedPixels": added,
+                "changedBbox": changed_bbox,
+                "beforeCoverage": round(before_coverage, 6),
+                "afterCoverage": round(after_coverage, 6),
+                "donorColumn": donor_column,
+            }
+        )
+
+    candidate = _assemble_batch_atlas(
+        frames_root,
+        actor=actor,
+        weapon="machinegun",
+        rows=rows,
+        columns=columns,
+        cell_size=cell_size,
+        replacements=replacements,
+    )
+    _prove_untouched_batch_rows(
+        current_atlas,
+        candidate,
+        rows=rows,
+        columns=columns,
+        cell_size=cell_size,
+        changed_rows={hurt_row},
+    )
+
+    atlas_path = output_dir / "machinegun-hurt-alpha-v2.png"
+    review_path = output_dir / "machinegun-hurt-alpha-v2-review.png"
+    proof_path = output_dir / "machinegun-hurt-alpha-v2-proof.png"
+    health_path = output_dir / "machinegun-hurt-alpha-v2-health.json"
+    _save_png_deterministic(candidate, atlas_path)
+    _render_batch_review(
+        current_atlas,
+        candidate,
+        row=hurt_row,
+        weapon="machinegun",
+        action="hurt",
+        columns=columns,
+        cell_size=cell_size,
+        output=review_path,
+    )
+    _render_alpha_background_proof(
+        candidate,
+        row=hurt_row,
+        weapon="machinegun",
+        action="hurt",
+        columns=columns,
+        cell_size=cell_size,
+        output=proof_path,
+    )
+
+    report = {
+        "schema": 1,
+        "kind": "matthias-machinegun-hurt-alpha-v2",
+        "actor": actor,
+        "hurtRow": hurt_row,
+        "donorColumn": donor_column,
+        "dx": list(dx),
+        "patch": list(patch),
+        "maxRgbMean": max_rgb_mean,
+        "minCoverage": min_coverage,
+        "untouchedRowsPixelIdentical": True,
+        "frames": health,
+        "sha256": _sha256_file(atlas_path),
+    }
+    health_path.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return report
+
+
+def repair_matthias_stabilization_batch(
+    frames_root: Path,
+    output_dir: Path,
+    *,
+    actor: str = "matthias",
+    actions: tuple[str, ...] = DEFAULT_MATTHIAS_ACTIONS,
+    canon_weapons: tuple[str, ...] = ("pistol", "machinegun"),
+    columns: int = 8,
+    cell_size: int = 416,
+    max_auto_scale_delta: float = 0.12,
+    min_standing_height_ratio: float = 0.80,
+    hurt_slots: tuple[int, ...] = MATTHIAS_HURT_STANDING_SLOTS,
+    machinegun_donor_column: int = MATTHIAS_MACHINEGUN_HURT_DONOR_COLUMN,
+    machinegun_dx: tuple[int, ...] = MATTHIAS_MACHINEGUN_HURT_DX,
+    machinegun_patch: tuple[int, int, int, int] = MATTHIAS_MACHINEGUN_HURT_PATCH,
+    machinegun_max_rgb_mean: float = MATTHIAS_MACHINEGUN_HURT_MAX_RGB_MEAN,
+    alpha_threshold: int = 8,
+) -> dict:
+    if "jump" not in actions or "hurt" not in actions:
+        raise BankContractError("stabilization batch requires jump and hurt actions")
+    if columns != len(hurt_slots) or columns != len(machinegun_dx):
+        raise BankContractError("stabilization slot/dx count must match columns")
+    if len(set(hurt_slots)) < 3:
+        raise BankContractError("stabilization hurt slots require three standing poses")
+    trailing_hold = 1
+    for index in range(len(hurt_slots) - 2, -1, -1):
+        if hurt_slots[index] != hurt_slots[-1]:
+            break
+        trailing_hold += 1
+    if trailing_hold >= 3:
+        raise BankContractError(
+            "stabilization hurt slots cannot end with 3+ identical frames"
+        )
+    if machinegun_donor_column < 0 or machinegun_donor_column >= columns:
+        raise BankContractError("machinegun hurt donor column outside batch")
+    if not 0.0 < min_standing_height_ratio <= 1.0:
+        raise BankContractError("min standing height ratio must be in (0,1]")
+
+    jump_row = actions.index("jump")
+    hurt_row = actions.index("hurt")
+    rows = len(actions)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    current_atlases = {
+        weapon: _assemble_batch_atlas(
+            frames_root,
+            actor=actor,
+            weapon=weapon,
+            rows=rows,
+            columns=columns,
+            cell_size=cell_size,
+            replacements={},
+        )
+        for weapon in ("machinegun", "shotgun", "panzerfaust")
+    }
+
+    # SMG hurt: preserve the existing pose/weapon pixel-for-pixel and fill only
+    # transparent cap holes from the one clean hurt frame.
+    machinegun_frames = [
+        _load_batch_frame(
+            frames_root,
+            actor,
+            "machinegun",
+            hurt_row,
+            column,
+        )
+        for column in range(columns)
+    ]
+    donor = machinegun_frames[machinegun_donor_column]
+    machinegun_replacements: dict[tuple[int, int], Image.Image] = {}
+    machinegun_health: list[dict] = []
+    for column, current in enumerate(machinegun_frames):
+        before = batch_frame_metrics(current, alpha_threshold)
+        if column == machinegun_donor_column:
+            repaired = current.copy()
+            added = 0
+            changed_bbox = None
+        else:
+            repaired, added, changed_bbox = _fill_transparent_from_shifted_patch(
+                current,
+                donor,
+                dx=machinegun_dx[column],
+                patch=machinegun_patch,
+                max_rgb_mean=machinegun_max_rgb_mean,
+            )
+
+        before_pixels = current.load()
+        after_pixels = repaired.load()
+        for y in range(current.height):
+            for x in range(current.width):
+                if before_pixels[x, y][3] != 0 and before_pixels[x, y] != after_pixels[x, y]:
+                    raise GeometryError(
+                        f"machinegun-hurt-overwrite:c{column}:{x},{y}"
+                    )
+
+        after = batch_frame_metrics(repaired, alpha_threshold)
+        if after.height != before.height or after.foot_y != before.foot_y:
+            raise GeometryError(
+                f"machinegun-hurt-geometry-drift:c{column}"
+            )
+        machinegun_replacements[(hurt_row, column)] = repaired
+        machinegun_health.append(
+            {
+                "column": column,
+                "dx": machinegun_dx[column],
+                "addedPixels": added,
+                "changedBbox": changed_bbox,
+                "donorColumn": machinegun_donor_column,
+                "beforeHeight": before.height,
+                "afterHeight": after.height,
+            }
+        )
+
+    machinegun_candidate = _assemble_batch_atlas(
+        frames_root,
+        actor=actor,
+        weapon="machinegun",
+        rows=rows,
+        columns=columns,
+        cell_size=cell_size,
+        replacements=machinegun_replacements,
+    )
+    _prove_untouched_batch_rows(
+        current_atlases["machinegun"],
+        machinegun_candidate,
+        rows=rows,
+        columns=columns,
+        cell_size=cell_size,
+        changed_rows={hurt_row},
+    )
+
+    # Shotgun: preserve the reviewed safe jump parity normalization and replace
+    # the broken prone tail of hurt with a short three-pose recovery cadence.
+    # Never finish with a long static hold: runtime hurt is a fast one-shot.
+    shotgun_replacements: dict[tuple[int, int], Image.Image] = {}
+    shotgun_jump_health: list[dict] = []
+    for column in range(columns):
+        current = _load_batch_frame(
+            frames_root,
+            actor,
+            "shotgun",
+            jump_row,
+            column,
+        )
+        current_metrics = batch_frame_metrics(current, alpha_threshold)
+        canonical_heights = [
+            batch_frame_metrics(
+                _load_batch_frame(
+                    frames_root,
+                    actor,
+                    weapon,
+                    jump_row,
+                    column,
+                ),
+                alpha_threshold,
+            ).height
+            for weapon in canon_weapons
+        ]
+        target_height = round(statistics.median(canonical_heights))
+        scale_y = target_height / current_metrics.height
+        if abs(scale_y - 1.0) > max_auto_scale_delta:
+            raise GeometryError(
+                "needs-authored-source:"
+                f"shotgun:jump:c{column}:"
+                f"scaleY={scale_y:.6f}>"
+                f"limit={max_auto_scale_delta:.6f}"
+            )
+        repaired = _normalize_batch_frame_y(
+            current,
+            target_height=target_height,
+            alpha_threshold=alpha_threshold,
+        )
+        shotgun_replacements[(jump_row, column)] = repaired
+        shotgun_jump_health.append(
+            {
+                "column": column,
+                "sourceHeight": current_metrics.height,
+                "targetHeight": target_height,
+                "scaleY": round(scale_y, 6),
+                "footY": current_metrics.foot_y,
+            }
+        )
+
+    standing_health: dict[str, dict] = {}
+    for weapon in ("shotgun", "panzerfaust"):
+        source_ratios: list[float] = []
+        for source_column in sorted(set(hurt_slots)):
+            source_height = batch_frame_metrics(
+                _load_batch_frame(
+                    frames_root,
+                    actor,
+                    weapon,
+                    hurt_row,
+                    source_column,
+                ),
+                alpha_threshold,
+            ).height
+            canonical_height = statistics.median(
+                [
+                    batch_frame_metrics(
+                        _load_batch_frame(
+                            frames_root,
+                            actor,
+                            canon_weapon,
+                            hurt_row,
+                            source_column,
+                        ),
+                        alpha_threshold,
+                    ).height
+                    for canon_weapon in canon_weapons
+                ]
+            )
+            ratio = source_height / canonical_height
+            if ratio < min_standing_height_ratio:
+                raise GeometryError(
+                    "needs-authored-source:"
+                    f"{weapon}:hurt:c{source_column}:"
+                    f"standingRatio={ratio:.6f}<"
+                    f"limit={min_standing_height_ratio:.6f}"
+                )
+            source_ratios.append(round(ratio, 4))
+        standing_health[weapon] = {
+            "strategy": "standing-flinch-resequence",
+            "sourceColumns": sorted(set(hurt_slots)),
+            "slots": list(hurt_slots),
+            "sourceHeightRatios": source_ratios,
+            "discardedProneColumns": [
+                column
+                for column in range(columns)
+                if column not in set(hurt_slots)
+            ],
+        }
+
+    for column, source_column in enumerate(hurt_slots):
+        shotgun_replacements[(hurt_row, column)] = _load_batch_frame(
+            frames_root,
+            actor,
+            "shotgun",
+            hurt_row,
+            source_column,
+        )
+
+    shotgun_candidate = _assemble_batch_atlas(
+        frames_root,
+        actor=actor,
+        weapon="shotgun",
+        rows=rows,
+        columns=columns,
+        cell_size=cell_size,
+        replacements=shotgun_replacements,
+    )
+    _prove_untouched_batch_rows(
+        current_atlases["shotgun"],
+        shotgun_candidate,
+        rows=rows,
+        columns=columns,
+        cell_size=cell_size,
+        changed_rows={jump_row, hurt_row},
+    )
+
+    panzer_replacements = {
+        (hurt_row, column): _load_batch_frame(
+            frames_root,
+            actor,
+            "panzerfaust",
+            hurt_row,
+            source_column,
+        )
+        for column, source_column in enumerate(hurt_slots)
+    }
+    panzer_candidate = _assemble_batch_atlas(
+        frames_root,
+        actor=actor,
+        weapon="panzerfaust",
+        rows=rows,
+        columns=columns,
+        cell_size=cell_size,
+        replacements=panzer_replacements,
+    )
+    _prove_untouched_batch_rows(
+        current_atlases["panzerfaust"],
+        panzer_candidate,
+        rows=rows,
+        columns=columns,
+        cell_size=cell_size,
+        changed_rows={hurt_row},
+    )
+
+    outputs = {
+        "machinegun": (
+            machinegun_candidate,
+            output_dir / "machinegun-stabilized-v1.png",
+        ),
+        "shotgun": (
+            shotgun_candidate,
+            output_dir / "shotgun-stabilized-v1.png",
+        ),
+        "panzerfaust": (
+            panzer_candidate,
+            output_dir / "panzerfaust-stabilized-v1.png",
+        ),
+    }
+    hashes: dict[str, str] = {}
+    for weapon, (candidate, output_path) in outputs.items():
+        _save_png_deterministic(candidate, output_path)
+        hashes[weapon] = _sha256_file(output_path)
+
+    _render_batch_review(
+        current_atlases["machinegun"],
+        machinegun_candidate,
+        row=hurt_row,
+        weapon="machinegun",
+        action="hurt",
+        columns=columns,
+        cell_size=cell_size,
+        output=output_dir / "machinegun-hurt-review.png",
+    )
+    _render_batch_review(
+        current_atlases["shotgun"],
+        shotgun_candidate,
+        row=jump_row,
+        weapon="shotgun",
+        action="jump",
+        columns=columns,
+        cell_size=cell_size,
+        output=output_dir / "shotgun-jump-review.png",
+    )
+    _render_batch_review(
+        current_atlases["shotgun"],
+        shotgun_candidate,
+        row=hurt_row,
+        weapon="shotgun",
+        action="hurt",
+        columns=columns,
+        cell_size=cell_size,
+        output=output_dir / "shotgun-hurt-review.png",
+    )
+    _render_batch_review(
+        current_atlases["panzerfaust"],
+        panzer_candidate,
+        row=hurt_row,
+        weapon="panzerfaust",
+        action="hurt",
+        columns=columns,
+        cell_size=cell_size,
+        output=output_dir / "panzerfaust-hurt-review.png",
+    )
+
+    report = {
+        "schema": 1,
+        "kind": "matthias-stabilization-v1",
+        "actor": actor,
+        "jumpRow": jump_row,
+        "hurtRow": hurt_row,
+        "untouchedRowsPixelIdentical": True,
+        "weapons": {
+            "machinegun": {
+                "strategy": "fill-transparent-cap-holes",
+                "frames": machinegun_health,
+                "sha256": hashes["machinegun"],
+            },
+            "shotgun": {
+                **standing_health["shotgun"],
+                "jumpParity": shotgun_jump_health,
+                "changedRows": [jump_row, hurt_row],
+                "sha256": hashes["shotgun"],
+            },
+            "panzerfaust": {
+                **standing_health["panzerfaust"],
+                "changedRows": [hurt_row],
+                "sha256": hashes["panzerfaust"],
+            },
+        },
+    }
+    (output_dir / "stabilization-v1-health.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return report
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if raw and raw[0] not in {"lint", "build", "audit-batch", "repair-parity", "repair-hurt-batch", "repair-machinegun-hurt-alpha"}:
+        raw.insert(0, "lint")
+
+    parser = argparse.ArgumentParser(
+        description="Chess Studio Sprite Forge fail-closed compiler"
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    lint = sub.add_parser("lint", help="lint one raw candidate frame")
+    lint.add_argument("frame", type=Path)
+    lint.add_argument("--alpha-threshold", type=int, default=8)
+    lint.add_argument("--edge-guard-px", type=int, default=2)
+    lint.add_argument("--min-detached-area", type=int, default=4)
+    lint.add_argument("--allow-detached", type=int, default=0)
+    lint.add_argument("--allow-hidden-rgb", action="store_true")
+    lint.add_argument("--report", type=Path)
+
+    build = sub.add_parser("build", help="compile an accepted atomic-frame bank")
+    build.add_argument("contract", type=Path)
+    build.add_argument("frames_root", type=Path)
+    build.add_argument("output_dir", type=Path)
+
+
+    audit_batch = sub.add_parser(
+        "audit-batch",
+        help="audit a local multi-weapon runtime frame batch",
+    )
+    audit_batch.add_argument("frames_root", type=Path)
+    audit_batch.add_argument("report", type=Path)
+    audit_batch.add_argument("--actor", default="matthias")
+    audit_batch.add_argument(
+        "--weapons",
+        default="pistol,machinegun,shotgun,panzerfaust",
+    )
+    audit_batch.add_argument(
+        "--canon-weapons",
+        default="pistol,machinegun",
+    )
+    audit_batch.add_argument(
+        "--actions",
+        default=",".join(DEFAULT_MATTHIAS_ACTIONS),
+    )
+    audit_batch.add_argument(
+        "--parity-actions",
+        default="jump,fall",
+    )
+    audit_batch.add_argument("--columns", type=int, default=8)
+    audit_batch.add_argument(
+        "--pass-scale-delta",
+        type=float,
+        default=0.04,
+    )
+    audit_batch.add_argument(
+        "--max-auto-scale-delta",
+        type=float,
+        default=0.12,
+    )
+
+    repair_parity = sub.add_parser(
+        "repair-parity",
+        help="repair one safe body-scale parity row and rebuild its atlas",
+    )
+    repair_parity.add_argument("frames_root", type=Path)
+    repair_parity.add_argument("weapon")
+    repair_parity.add_argument("action")
+    repair_parity.add_argument("output_atlas", type=Path)
+    repair_parity.add_argument("report", type=Path)
+    repair_parity.add_argument("preview", type=Path)
+    repair_parity.add_argument("--actor", default="matthias")
+    repair_parity.add_argument(
+        "--canon-weapons",
+        default="pistol,machinegun",
+    )
+    repair_parity.add_argument(
+        "--actions",
+        default=",".join(DEFAULT_MATTHIAS_ACTIONS),
+    )
+    repair_parity.add_argument("--columns", type=int, default=8)
+    repair_parity.add_argument("--cell-size", type=int, default=416)
+    repair_parity.add_argument(
+        "--max-auto-scale-delta",
+        type=float,
+        default=0.12,
+    )
+
+
+    repair_hurt_batch = sub.add_parser(
+        "repair-hurt-batch",
+        help="build the reviewed Matthias jump/hurt stabilization batch",
+    )
+    repair_hurt_batch.add_argument("frames_root", type=Path)
+    repair_hurt_batch.add_argument("output_dir", type=Path)
+    repair_hurt_batch.add_argument("--actor", default="matthias")
+    repair_hurt_batch.add_argument("--columns", type=int, default=8)
+    repair_hurt_batch.add_argument("--cell-size", type=int, default=416)
+    repair_hurt_batch.add_argument(
+        "--max-auto-scale-delta",
+        type=float,
+        default=0.12,
+    )
+    repair_hurt_batch.add_argument(
+        "--min-standing-height-ratio",
+        type=float,
+        default=0.80,
+    )
+    repair_hurt_alpha = sub.add_parser(
+        "repair-machinegun-hurt-alpha",
+        help="build Matthias SMG hurt alpha v2 without changing opaque pose pixels",
+    )
+    repair_hurt_alpha.add_argument("frames_root", type=Path)
+    repair_hurt_alpha.add_argument("output_dir", type=Path)
+    repair_hurt_alpha.add_argument("--actor", default="matthias")
+    repair_hurt_alpha.add_argument("--columns", type=int, default=8)
+    repair_hurt_alpha.add_argument("--cell-size", type=int, default=416)
+    repair_hurt_alpha.add_argument(
+        "--min-coverage",
+        type=float,
+        default=0.985,
+    )
+
+    return parser.parse_args(raw)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    if args.command == "audit-batch":
+        payload = audit_sprite_batch(
+            args.frames_root,
+            actor=args.actor,
+            weapons=_csv_values(args.weapons),
+            actions=_csv_values(args.actions),
+            canon_weapons=_csv_values(args.canon_weapons),
+            parity_actions=set(_csv_values(args.parity_actions)),
+            columns=args.columns,
+            pass_scale_delta=args.pass_scale_delta,
+            max_auto_scale_delta=args.max_auto_scale_delta,
+        )
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(args.report)
+        return 0
+
+    if args.command == "repair-machinegun-hurt-alpha":
+        report = repair_matthias_machinegun_hurt_alpha_v2(
+            args.frames_root,
+            args.output_dir,
+            actor=args.actor,
+            columns=args.columns,
+            cell_size=args.cell_size,
+            min_coverage=args.min_coverage,
+        )
+        print(
+            json.dumps(
+                {
+                    "status": "ok",
+                    "sha256": report["sha256"],
+                    "minCoverage": report["minCoverage"],
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
+
+    if args.command == "repair-hurt-batch":
+        report = repair_matthias_stabilization_batch(
+            args.frames_root,
+            args.output_dir,
+            actor=args.actor,
+            columns=args.columns,
+            cell_size=args.cell_size,
+            max_auto_scale_delta=args.max_auto_scale_delta,
+            min_standing_height_ratio=args.min_standing_height_ratio,
+        )
+        print(
+            json.dumps(
+                {
+                    "status": "ok",
+                    "sha256": {
+                        weapon: details["sha256"]
+                        for weapon, details in report["weapons"].items()
+                    },
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
+
+    if args.command == "repair-parity":
+        report = repair_sprite_parity(
+            args.frames_root,
+            actor=args.actor,
+            target_weapon=args.weapon,
+            action=args.action,
+            actions=_csv_values(args.actions),
+            canon_weapons=_csv_values(args.canon_weapons),
+            output_atlas=args.output_atlas,
+            report_path=args.report,
+            preview_path=args.preview,
+            columns=args.columns,
+            cell_size=args.cell_size,
+            max_auto_scale_delta=args.max_auto_scale_delta,
+        )
+        print(
+            json.dumps(
+                {
+                    "status": "ok",
+                    "sha256": report["sha256"],
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
+
+    if args.command == "build":
+        manifest = build_bank(args.contract, args.frames_root, args.output_dir)
+        identity = (
+            {"weapon": manifest["weapon"]}
+            if manifest["schema"] == 1
+            else {
+                "surface": manifest["surface"],
+                "variant": manifest["variant"],
+            }
+        )
+        print(json.dumps(
+            {
+                "actor": manifest["actor"],
+                **identity,
+                "parts": {
+                    name: value["sha256"]
+                    for name, value in manifest["parts"].items()
+                },
+            },
+            sort_keys=True,
+        ))
+        return 0
+
+    config = LintConfig(
+        alpha_threshold=args.alpha_threshold,
+        edge_guard_px=args.edge_guard_px,
+        min_detached_area=args.min_detached_area,
+        allowed_detached_components=args.allow_detached,
+        reject_hidden_rgb=not args.allow_hidden_rgb,
+    )
+    result = lint_frame(Image.open(args.frame), config)
+    payload = result.to_json()
+    rendered = json.dumps(payload, indent=2, sort_keys=True)
+
+    if args.report:
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(rendered + "\n", encoding="utf-8")
+
+    print(rendered)
+    return 0 if result.ok else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
